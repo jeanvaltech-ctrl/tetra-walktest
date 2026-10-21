@@ -15,8 +15,10 @@ sécurité du réseau (authentification, chiffrement).
 
 ## Utiliser l'appli
 
-Ouvrir l'appli dans Edge ou Chrome (version publiée : GitHub Pages du dépôt, ou en local, voir
-plus bas). Au premier chargement, elle est mise en cache pour fonctionner ensuite sans réseau.
+**Appli en ligne : https://jeanvaltech-ctrl.github.io/tetra-walktest/** (Edge ou Chrome).
+Au premier chargement, elle est mise en cache pour fonctionner ensuite sans réseau : l'ouvrir une
+fois avec une connexion avant d'aller sur site. Edge propose aussi de l'installer comme une
+application (icône dans la barre d'adresse).
 
 **Connexion** : fermer SCOUT (un seul programme à la fois sur le port), cliquer « Connecter la
 radio… » et choisir **« Motorola Solutions Portable Tetra Radio Port 1 »** (COM5 en général).
