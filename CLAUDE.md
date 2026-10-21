@@ -36,12 +36,22 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 7. Export par étage : CSV (temps, étage, x, y, LA, canal, RSSI, C1, voisines) + PNG du plan avec trace.
 8. Sauvegarde du projet (fichier local) pour pouvoir reprendre.
 
+## Fait depuis la V1
+
+Multi-étages, dossier projet (`plans/`, `exports/`), critère ASTRID en temps réel
+(> -88 dBm sur 95 % de la surface), interface FR / NL / EN. Première utilisation terrain :
+deux SSV chez un client (pharma) le 22/10/2026.
+
 ## Ensuite
 
-- Gestion multi-étages dans un même projet.
-- Import des anciens `.atp` SCOUT (logique de `tools/mtp_trace.py`).
-- Intégration avec CRG (Connext Reports Generator, appli Flask de Jean) : format d'export à
-  aligner avec ce que CRG consomme.
+- **Éléments du bâtiment sur le plan** : placer la MER (Main Equipment Room), les shafts, les
+  passages de câbles… directement avec les mesures (calque d'annotations par étage, exporté
+  avec le PNG). Attention : « MER » désigne ici la salle technique, pas le Modulation Error
+  Rate du bloc 93–ae de `docs/PROTOCOL.md`.
+- **Rapport SSV généré depuis l'appli** (PDF), puis **connexion à CRG** (Connext Reports
+  Generator, appli Flask de Jean) : format d'export à aligner avec ce que CRG consomme.
+- Import des anciens `.atp` SCOUT (logique de `tools/mtp_trace.py` / `js/atp.js`).
+- Relecture du néerlandais de `js/strings.js` par un collègue flamand.
 
 ## Conventions
 
