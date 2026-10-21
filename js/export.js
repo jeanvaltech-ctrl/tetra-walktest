@@ -2,11 +2,13 @@
 import { ViewTransform } from './geometry.js';
 import { NEIGH } from './protocol.js';
 import { FONT, nf, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
+import { DEFAULT_CRITERION, sampleOk, complianceText } from './criterion.js';
 
 // Colonnes : mêmes noms que tools/mtp_trace.py, plus date, segment et position en mètres.
 // x, y : pixels du plan importé (origine en haut à gauche) ; x_m, y_m : si l'étage est calibré.
+// astrid_ok : 1 si le RSSI respecte le critère ASTRID du projet (> -88 dBm par défaut), sinon 0.
 export const CSV_COLUMNS = ['date', 'time', 'floor', 'segment', 'x', 'y', 'x_m', 'y_m', 'la', 'channel', 'rssi', 'c1',
-  ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`])];
+  ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`]), 'astrid_ok'];
 
 const pad = (v, n = 2) => String(v).padStart(n, '0');
 const localDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -24,7 +26,7 @@ export function floorSamples(floor) {
 }
 
 /** Lignes CSV d'un étage, avec leur heure pour pouvoir trier plusieurs étages ensemble. */
-function csvLines(floor) {
+function csvLines(floor, criterion) {
   const m = floor.calibration ? floor.calibration.mPerPx : null;
   return floorSamples(floor).map(s => {
     const d = new Date(s.time);
@@ -32,6 +34,7 @@ function csvLines(floor) {
       ...s, date: localDate(d), time: localTime(d), floor: floor.name,
       x: s.x.toFixed(1), y: s.y.toFixed(1),
       x_m: m ? (s.x * m).toFixed(2) : '', y_m: m ? (s.y * m).toFixed(2) : '',
+      astrid_ok: sampleOk(s.rssi, criterion) ? 1 : 0,
     };
     return { time: s.time, line: CSV_COLUMNS.map(c => csvCell(row[c])).join(';') };
   });
@@ -40,10 +43,11 @@ function csvLines(floor) {
 /** CSV séparé par « ; », UTF-8 avec BOM (accents lisibles dans Excel), point décimal. */
 const csvText = lines => '﻿' + [CSV_COLUMNS.join(';'), ...lines.map(l => l.line)].join('\r\n') + '\r\n';
 
-export const floorCsv = floor => csvText(csvLines(floor));
+export const floorCsv = (floor, criterion = DEFAULT_CRITERION) => csvText(csvLines(floor, criterion));
 
 /** Tous les étages dans un seul CSV (colonne floor), triés par heure. */
-export const projectCsv = project => csvText(project.floors.flatMap(csvLines).sort((a, b) => a.time - b.time));
+export const projectCsv = project =>
+  csvText(project.floors.flatMap(f => csvLines(f, project.criterion || DEFAULT_CRITERION)).sort((a, b) => a.time - b.time));
 
 /** Texte du bandeau sous le plan exporté. */
 export function caption(project, floor) {
@@ -53,7 +57,8 @@ export function caption(project, floor) {
     ? `${localDate(new Date(samples[0].time))} ${localTime(new Date(samples[0].time)).slice(0, 5)}–${localTime(new Date(samples[samples.length - 1].time)).slice(0, 5)}`
     : '';
   const radio = floor.radio && floor.radio.issi ? `radio ISSI ${floor.radio.issi}` : '';
-  return [parts, when, `${nf(samples.length)} mesures`, radio].filter(Boolean).join(' · ');
+  const astrid = complianceText(floor, project.criterion || DEFAULT_CRITERION);
+  return [parts, when, `${nf(samples.length)} mesures`, astrid, radio].filter(Boolean).join(' · ');
 }
 
 /** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau. */

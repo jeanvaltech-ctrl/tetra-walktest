@@ -73,6 +73,15 @@ table.neigh th:first-child, table.neigh td:first-child { text-align: left; }
 
 dl.stats { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
 
+.verdict { margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; font-weight: 600; }
+.verdict:empty { display: none; }
+.verdict.ok, dd.ok { color: var(--ok); }
+.verdict.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.verdict.ko, dd.ko { color: var(--ko); }
+.verdict.ko { background: color-mix(in srgb, var(--ko) 14%, transparent); }
+.criterion { margin: 6px 0 8px; }
+.criterion input { width: 70px; }
+
 .floor-pick { flex-wrap: nowrap; }
 .floor-pick select { flex: 1; min-width: 0; }
 select { font: inherit; color: var(--fg); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }

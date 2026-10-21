@@ -68,13 +68,29 @@ l'étage du dessous / du dessus avec ▼ / ▲ (touches Page↓ / Page↑).
   l'étage et cliquer « **Continuer les mesures** » : les nouveaux passages s'ajoutent aux
   précédents, rien n'est effacé.
 
+### Critère ASTRID
+
+Recommandation ASTRID pour l'indoor : niveau **meilleur que -88 dBm sur 95 % de la surface**
+(sinon, installation indoor ASTRID exigée par la commission de sécurité, IBZ). L'appli l'évalue
+en direct :
+
+- **panneau live** : « ✔ Conforme ASTRID » / « ✘ Insuffisant » pour la mesure en cours ;
+- **par étage** (panneau Mesure, liste des étages ✔ / ✘) : pourcentage conforme, comparé à
+  l'objectif. La surface est approchée par la **longueur parcourue** (chaque mesure compte pour
+  le bout de trajet qu'elle couvre ; rester sur place ne fausse rien) ; le pourcentage par
+  nombre de points est affiché à titre indicatif. Les pourcentages sont arrondis vers le bas ;
+- **exports** : colonne `astrid_ok` (1 / 0) dans le CSV, verdict dans le bandeau du PNG.
+
+« Meilleur que -88 dBm » = strictement supérieur, soit -87 dBm ou mieux (le vert de la légende
+SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ».
+
 ### Enregistrer et exporter
 
 - **Enregistrer** (Ctrl+S) : un fichier `<projet>.walktest.json` contient tout le projet (plans,
   calibration, seuils, mesures placées, identité radio et **trames radio brutes** horodatées,
   pour pouvoir tout recalculer plus tard). « Ouvrir… » reprend un projet.
 - **Exporter CSV** (par étage) : séparateur `;`, UTF-8 avec BOM, point décimal. Colonnes :
-  `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx`
+  `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx;astrid_ok`
   (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
   (projet, étage, horaire, nombre de mesures, ISSI de la radio).
@@ -129,6 +145,7 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `js/export.js` | export CSV et PNG par étage |
 | `js/project.js` | modèle de projet et fichier `.walktest.json` |
 | `js/folder.js` | dossier projet : plans, tri des étages, projet enregistré |
+| `js/criterion.js` | critère ASTRID : conformité par mesure et par étage |
 | `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
 | `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
 | `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |

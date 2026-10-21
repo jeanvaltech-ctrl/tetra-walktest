@@ -10,6 +10,7 @@ import { Session, floorStats } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
+import { DEFAULT_CRITERION, sampleOk, floorCompliance, fmtPct } from './criterion.js';
 import { nf, fmtMeters, drawLabel, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
 
 const $ = id => document.getElementById(id);
@@ -72,6 +73,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', () => autosaveNow());
 
 const thresholds = () => (state.project && state.project.thresholds) || DEFAULT_THRESHOLDS;
+const criterion = () => (state.project && state.project.criterion) || DEFAULT_CRITERION;
 const colorOf = rssi => rssiColor(rssi, thresholds());
 
 const view = new PlanView($('plan'));
@@ -133,6 +135,7 @@ async function floorBitmap(fl) {
 
 /** Affiche un projet (nouveau, ouvert ou récupéré) sur l'étage demandé (1er par défaut). */
 async function showProject(project, handle, floorId = null, session = null) {
+  project.criterion ??= { ...DEFAULT_CRITERION };   // copie de secours d'avant le critère ASTRID
   state.project = project;
   state.floor = null;
   state.fileHandle = handle;
@@ -265,14 +268,17 @@ function renderFloors() {
   const sel = $('floor-select');
   // libellé court (la barre latérale est étroite) : nom, nombre de mesures entre parenthèses
   sel.innerHTML = p.floors.map(f => {
-    const n = floorSampleCount(f);
-    return `<option value="${f.id}">${esc(f.name)}${n ? ` (${nf(n)})` : ''}${f === state.floor && measuring ? ' ●' : ''}</option>`;
+    const n = floorSampleCount(f), ok = floorCompliance(f, criterion()).ok;
+    const mark = ok === null ? '' : ok ? ' ✔' : ' ✘';
+    return `<option value="${f.id}">${esc(f.name)}${n ? ` (${nf(n)})` : ''}${mark}${f === state.floor && measuring ? ' ●' : ''}</option>`;
   }).join('');
   sel.value = state.floor.id;
   const i = p.floors.indexOf(state.floor), fl = state.floor;
   $('btn-floor-down').disabled = i <= 0;
   $('btn-floor-up').disabled = i >= p.floors.length - 1;
+  const r = floorCompliance(fl, criterion());
   $('floor-meta').textContent = [`Étage ${i + 1} sur ${p.floors.length}`, measuring ? '● en mesure' : '', count(fl),
+    r.pct === null ? '' : `ASTRID ${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)}`,
     `${fl.segments.length} segment${fl.segments.length > 1 ? 's' : ''}`, fl.calibration ? 'échelle calibrée' : 'non calibré']
     .filter(Boolean).join(' · ');
   $('btn-floor-delete').disabled = p.floors.length < 2;
@@ -494,7 +500,7 @@ window.addEventListener('keydown', e => {
 
 $('btn-export-csv').addEventListener('click', () => runFileAction(async () => {
   const fl = state.floor;
-  await exportFile(async () => new Blob([floorCsv(fl)], { type: 'text/csv' }), `${fileSafe(`${state.project.name} - ${fl.name}`)}.csv`,
+  await exportFile(async () => new Blob([floorCsv(fl, criterion())], { type: 'text/csv' }), `${fileSafe(`${state.project.name} - ${fl.name}`)}.csv`,
     { description: 'CSV', accept: { 'text/csv': ['.csv'] } });
 }));
 
@@ -512,7 +518,7 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
     || (window.showDirectoryPicker ? await showDirectoryPicker({ id: 'exports', mode: 'readwrite' }) : null);
   const files = project.floors.flatMap(fl => [
     { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
-    { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl)], { type: 'text/csv' }) },
+    { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl, project.criterion)], { type: 'text/csv' }) },
   ]).concat({ name: `${base}tous les étages.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
   for (const [i, f] of files.entries()) {
     notify(`Export ${i + 1}/${files.length}…`, 'busy', 0);
@@ -835,9 +841,14 @@ function renderMeasure() {
 
   const s = floorStats(fl), cal = fl.calibration;
   const length = cal ? `${nf(s.length * cal.mPerPx, 1)} m` : `${nf(s.length)} px (non calibré)`;
+  const c = criterion(), r = floorCompliance(fl, c);
+  const astrid = r.pct === null ? '<dd class="muted">pas encore de mesure</dd>'
+    : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} &gt; ${c.rssi} dBm `
+      + `<span class="muted">(objectif ${c.percent} % ; ${fmtPct(r.pctSamples)} des points)</span></dd>`;
   $('measure-stats').innerHTML =
     `<dt>Points de mesure</dt><dd>${nf(s.samples)}${ses.pending.length ? ` <span class="muted">+ ${ses.pending.length} en attente</span>` : ''}</dd>` +
-    `<dt>Segments</dt><dd>${s.segments}</dd><dt>Parcours</dt><dd>${length}</dd>`;
+    `<dt>Segments</dt><dd>${s.segments}</dd><dt>Parcours</dt><dd>${length}</dd>` +
+    `<dt>ASTRID</dt>${astrid}`;
 }
 
 // ---------- seuils RSSI ----------
@@ -847,7 +858,26 @@ function renderThresholds() {
     `<span class="swatch" style="background:${t.color}"></span><span>≥</span>` +
     `<input type="number" step="1" max="0" min="-140" data-i="${i}" value="${t.min}" aria-label="Seuil ${i + 1} (dBm)">`
   ).join('') + `<span class="swatch" style="background:#000"></span><span>&lt;</span><span class="muted">${th[th.length - 1].min} : « No »</span>`;
+  $('crit-rssi').value = criterion().rssi;
+  $('crit-pct').value = criterion().percent;
 }
+
+// critère ASTRID réglable (par défaut : > -88 dBm sur 95 %)
+function setCriterion(c) {
+  state.project.criterion = c;
+  markDirty();
+  renderThresholds();
+  render();
+}
+for (const id of ['crit-rssi', 'crit-pct']) {
+  $(id).addEventListener('change', () => {
+    if (!state.project) return;
+    const rssi = $('crit-rssi').valueAsNumber, percent = $('crit-pct').valueAsNumber;
+    if (!Number.isFinite(rssi) || !Number.isFinite(percent) || percent <= 0 || percent > 100) { renderThresholds(); return; }
+    setCriterion({ rssi, percent });
+  });
+}
+$('btn-criterion-reset').addEventListener('click', () => { if (state.project) setCriterion({ ...DEFAULT_CRITERION }); });
 
 $('thresholds').addEventListener('change', e => {
   if (!e.target.matches('input') || !state.project) return;
@@ -1000,6 +1030,7 @@ function resetLive() {
   b.querySelector('b').textContent = '—';
   for (const id of ['live-la', 'live-ch', 'live-c1']) $(id).textContent = '—';
   $('live-neigh').innerHTML = '<tr><td colspan="4" class="muted">En attente des mesures…</td></tr>';
+  $('live-astrid').textContent = '';
   $('live-age').textContent = '';
 }
 
@@ -1011,6 +1042,10 @@ radio.addEventListener('measure', e => {
   $('live-la').textContent = s.la ?? '—';
   $('live-ch').textContent = s.channel ?? '—';
   $('live-c1').textContent = s.c1 === '' ? '—' : s.c1;
+  // verdict ASTRID de la mesure en cours
+  const c = criterion(), ok = sampleOk(s.rssi, c), v = $('live-astrid');
+  v.textContent = ok ? `✔ Conforme ASTRID (> ${c.rssi} dBm)` : `✘ Insuffisant pour ASTRID (≤ ${c.rssi} dBm)`;
+  v.className = `verdict ${ok ? 'ok' : 'ko'}`;
   // voisines identifiées par LA (la radio les reclasse en permanence), triées par RSSI
   const neigh = [1, 2, 3, 4].filter(n => s[`n${n}_la`] !== '')
     .map(n => ({ la: s[`n${n}_la`], ch: s[`n${n}_channel`], rssi: s[`n${n}_rssi`], cx: s[`n${n}_cx`] }))

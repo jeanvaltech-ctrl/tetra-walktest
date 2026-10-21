@@ -39,6 +39,7 @@
           <dt>C1</dt><dd id="live-c1">—</dd>
         </dl>
       </div>
+      <p id="live-astrid" class="verdict"></p>
       <table class="neigh">
         <thead><tr><th>Voisine (LA)</th><th>Canal</th><th>RSSI</th><th>Cx</th></tr></thead>
         <tbody id="live-neigh"></tbody>
@@ -175,11 +176,18 @@
 
     <section id="sec-thresholds" hidden>
       <details>
-        <summary>Seuils RSSI</summary>
+        <summary>Seuils RSSI et critère ASTRID</summary>
         <p class="muted small">Couleur de la trace selon le RSSI de la cellule serveuse (dBm).</p>
         <div id="thresholds" class="thresholds"></div>
         <p id="thresholds-error" class="ko small" hidden></p>
         <button id="btn-thresholds-reset">Rétablir la légende SCOUT</button>
+        <p class="muted small" style="margin-top:12px">Critère ASTRID : niveau meilleur que le seuil sur le pourcentage
+          demandé de la surface (approchée par la longueur parcourue).</p>
+        <div class="row criterion">
+          <label>&gt; <input id="crit-rssi" type="number" step="1" max="0" min="-140" aria-label="Seuil ASTRID (dBm)"> dBm</label>
+          <label>sur <input id="crit-pct" type="number" step="1" min="1" max="100" aria-label="Pourcentage exigé"> %</label>
+        </div>
+        <button id="btn-criterion-reset">Rétablir ASTRID (&gt; -88 dBm, 95 %)</button>
       </details>
     </section>
 

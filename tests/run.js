@@ -11,6 +11,7 @@ import { ViewTransform, metersPerPixel, niceLength } from '../js/geometry.js';
 import { setCalibration, createProject, addFloor, removeFloor, floorSampleCount, serializeProject, deserializeProject } from '../js/project.js';
 import { floorCsv, projectCsv, floorPng, caption, CSV_COLUMNS } from '../js/export.js';
 import { AutoSave } from '../js/autosave.js';
+import { sampleOk, floorCompliance, fmtPct, complianceText } from '../js/criterion.js';
 import { readProjectFolder, newPlans, floorNameFromFile, floorNumber, compareFloorNames } from '../js/folder.js';
 
 const ATP = 'fixtures/demo.atp';
@@ -292,6 +293,7 @@ await test('Export CSV : colonnes, tri, mètres, échappement', async () => {
   assert(r.segment === '1' && r.x === '150.0' && r.x_m === '15.00' && r.y_m === '15.00', lines[1]);
   assert(r.rssi === '-60' && r.n1_la === '1002' && r.n2_la === '', lines[1]);
   assert(rows.map(x => x.segment).join(',') === '1,1,2' && rows[2].time === '10:00:05.000', 'tri par heure');
+  assert(rows.map(x => x.astrid_ok).join(',') === '1,0,0', 'astrid_ok : ' + rows.map(x => x.astrid_ok).join(','));
 });
 
 await test('Plusieurs étages : CSV commun trié par heure, suppression d\'un étage', async () => {
@@ -308,6 +310,21 @@ await test('Plusieurs étages : CSV commun trié par heure, suppression d\'un é
   let err = null;
   try { removeFloor(project, f2.id); } catch (e) { err = e; }
   assert(err && project.floors.length === 1, 'le dernier étage a été supprimé');
+});
+
+// ---------- critère ASTRID ----------
+await test('ASTRID : seuil strict, pondération par longueur parcourue, arrondi par défaut', async () => {
+  assert(!sampleOk(-88) && sampleOk(-87) && !sampleOk('') && sampleOk(-60), 'seuil > -88 dBm');
+  const { project, floor } = await sampleProject();
+  // s1 : -60 (conforme) et -95 sur 100 px chacun ; s2 : un seul point (-120), sans longueur
+  const r = floorCompliance(floor, project.criterion);
+  assert(r.n === 3 && r.okN === 1 && Math.abs(r.pct - 50) < 1e-9 && Math.abs(r.pctSamples - 100 / 3) < 1e-9 && r.ok === false, JSON.stringify(r));
+  // rester sur place ne pèse pas : 10 points conformes au même endroit ne changent rien
+  floor.segments[0].samples.push(...Array.from({ length: 10 }, () => ({ ...floor.segments[0].samples[1], rssi: -60 })));
+  assert(Math.abs(floorCompliance(floor).pct - 50) < 1e-9, 'points immobiles comptés dans la surface');
+  assert(floorCompliance({ segments: [] }).pct === null, 'étage sans mesure');
+  assert(fmtPct(94.96) === '94,9 %' && fmtPct(95) === '95,0 %', `${fmtPct(94.96)} / ${fmtPct(95)}`);
+  assert(complianceText(floor, { rssi: -100, percent: 50 }).includes('conforme (objectif 50 %)'), complianceText(floor, { rssi: -100, percent: 50 }));
 });
 
 // ---------- dossier projet ----------

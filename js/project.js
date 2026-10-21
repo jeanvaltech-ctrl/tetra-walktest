@@ -3,6 +3,7 @@
 // La V1 n'expose qu'un étage dans l'interface, mais le modèle en prévoit plusieurs.
 import { metersPerPixel } from './geometry.js';
 import { DEFAULT_THRESHOLDS } from './thresholds.js';
+import { DEFAULT_CRITERION } from './criterion.js';
 
 export const FORMAT = 'tetra-walktest';
 export const FORMAT_VERSION = 1;
@@ -16,6 +17,7 @@ export function createProject({ name, building = '' }) {
     building,
     created: new Date().toISOString(),
     thresholds: DEFAULT_THRESHOLDS.map(t => ({ ...t })),
+    criterion: { ...DEFAULT_CRITERION },   // recommandation ASTRID (réglable)
     floors: [],
   };
 }
@@ -73,6 +75,7 @@ export async function deserializeProject(text) {
   try { p = JSON.parse(text); } catch { throw new Error('Ce fichier n\'est pas un projet TETRA Walk-Test (JSON illisible).'); }
   if (!p || p.format !== FORMAT || !Array.isArray(p.floors)) throw new Error('Ce fichier n\'est pas un projet TETRA Walk-Test.');
   if (p.version > FORMAT_VERSION) throw new Error(`Projet enregistré par une version plus récente (format ${p.version}) : mettez l'appli à jour.`);
+  p.criterion ??= { ...DEFAULT_CRITERION };   // projets enregistrés avant le critère ASTRID
   for (const f of p.floors) {
     const { data, ...image } = f.image;
     f.image = { ...image, blob: await (await fetch(data)).blob() };
