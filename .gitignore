@@ -1,0 +1,14 @@
+# Vraies mesures : jamais dans le dépôt (plans clients, identifiants radio, données du réseau ASTRID)
+FLOOR */
+*.atp
+!tests/fixtures/*.atp
+Export*.csv
+*.walktest.json
+mtp_live_*.csv
+
+# Outils locaux
+.claude/
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TETRA Walk-Test</title>
+<meta name="description" content="Mesure de couverture TETRA indoor avec un Motorola MTP6550.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="bar">
+  <h1>TETRA Walk-Test</h1>
+  <span id="project-title" class="project-title"></span>
+  <span id="status" class="status">Prêt</span>
+  <span id="radio-pill" class="pill">Radio déconnectée</span>
+</header>
+<div class="layout">
+  <aside class="side">
+    <section id="sec-radio">
+      <h2>Radio</h2>
+      <p id="radio-state" class="muted">Non connectée.</p>
+      <dl id="radio-info" class="info" hidden></dl>
+      <div class="row">
+        <button id="btn-connect" class="primary">Connecter la radio…</button>
+        <button id="btn-disconnect" hidden>Déconnecter</button>
+      </div>
+      <p id="radio-error" class="ko small" hidden></p>
+    </section>
+
+    <section id="sec-live" hidden>
+      <h2>Mesure en direct</h2>
+      <div class="serving">
+        <div id="live-rssi" class="rssi-badge"><b>—</b><span>dBm</span></div>
+        <dl class="info">
+          <dt>LA</dt><dd id="live-la">—</dd>
+          <dt>Canal</dt><dd id="live-ch">—</dd>
+          <dt>C1</dt><dd id="live-c1">—</dd>
+        </dl>
+      </div>
+      <table class="neigh">
+        <thead><tr><th>Voisine (LA)</th><th>Canal</th><th>RSSI</th><th>Cx</th></tr></thead>
+        <tbody id="live-neigh"></tbody>
+      </table>
+      <p id="live-age" class="muted small"></p>
+    </section>
+
+    <section id="sec-measure" hidden>
+      <h2>Mesure</h2>
+      <p id="measure-help" class="help"></p>
+      <div class="row">
+        <button id="btn-start" class="primary">Démarrer</button>
+        <button id="btn-pause" title="Barre d'espace">Pause</button>
+        <button id="btn-endseg">Fin de segment</button>
+        <button id="btn-undo" title="Ctrl+Z">Annuler le point</button>
+        <button id="btn-stop">Terminer</button>
+      </div>
+      <dl id="measure-stats" class="info stats"></dl>
+    </section>
+
+    <section id="sec-recover" hidden>
+      <h2>Reprendre</h2>
+      <p id="recover-text"></p>
+      <div class="row">
+        <button id="btn-recover" class="primary">Reprendre ce projet</button>
+        <button id="btn-recover-discard">Ignorer</button>
+      </div>
+    </section>
+
+    <section id="sec-new">
+      <h2>Nouveau projet</h2>
+      <form id="form-new" class="stack">
+        <label>Nom du projet
+          <input name="name" required placeholder="ex. Centre commercial, Bruxelles" autocomplete="off"></label>
+        <label>Bâtiment / adresse
+          <input name="building" autocomplete="off"></label>
+        <label>Étage
+          <input name="floor" required value="Étage 0" autocomplete="off"></label>
+        <label>Plan de l'étage (PNG, JPG)
+          <input name="plan" type="file" accept="image/png,image/jpeg" required></label>
+        <button type="submit" class="primary">Créer le projet</button>
+        <p id="new-error" class="ko" hidden></p>
+      </form>
+      <p class="muted small">ou reprendre un projet enregistré :</p>
+      <button class="btn-open">Ouvrir un projet…</button>
+      <input id="open-file" type="file" accept=".json,application/json" hidden>
+    </section>
+
+    <section id="sec-project" hidden>
+      <h2>Projet</h2>
+      <dl class="info">
+        <dt>Projet</dt><dd id="p-name"></dd>
+        <dt>Bâtiment</dt><dd id="p-building"></dd>
+        <dt>Étage</dt><dd id="p-floor"></dd>
+        <dt>Plan</dt><dd id="p-plan"></dd>
+      </dl>
+      <div class="row">
+        <button id="btn-save" class="primary" title="Ctrl+S">Enregistrer</button>
+        <button id="btn-save-as">Enregistrer sous…</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btn-export-csv">Exporter CSV</button>
+        <button id="btn-export-png">Exporter PNG</button>
+      </div>
+      <p id="save-state" class="muted small"></p>
+      <div class="row">
+        <button id="btn-new-project">Nouveau projet…</button>
+        <button class="btn-open">Ouvrir…</button>
+      </div>
+    </section>
+
+    <section id="sec-view" hidden>
+      <h2>Affichage</h2>
+      <div class="row">
+        <button id="zoom-out" title="Zoom arrière (−)" aria-label="Zoom arrière">−</button>
+        <button id="zoom-in" title="Zoom avant (+)" aria-label="Zoom avant">+</button>
+        <button id="zoom-fit" title="Ajuster à la vue (0)">Ajuster</button>
+        <span id="zoom-level" class="muted"></span>
+      </div>
+      <p class="muted small">Glisser pour déplacer le plan, molette pour zoomer.</p>
+    </section>
+
+    <section id="sec-scale" hidden>
+      <h2>Échelle</h2>
+      <p id="scale-status"></p>
+      <p id="calib-help" class="help" hidden></p>
+      <form id="form-dist" class="stack" hidden>
+        <label>Distance réelle entre les 2 points (m)
+          <input name="meters" type="number" min="0.01" step="0.01" required></label>
+        <div class="row">
+          <button type="submit" class="primary">Valider</button>
+          <button type="button" class="calib-cancel">Annuler</button>
+        </div>
+      </form>
+      <div class="row" id="calib-actions">
+        <button id="btn-calib">Calibrer…</button>
+        <button id="btn-calib-clear" hidden>Supprimer</button>
+        <button class="calib-cancel" hidden>Annuler</button>
+      </div>
+    </section>
+
+    <section id="sec-thresholds" hidden>
+      <details>
+        <summary>Seuils RSSI</summary>
+        <p class="muted small">Couleur de la trace selon le RSSI de la cellule serveuse (dBm).</p>
+        <div id="thresholds" class="thresholds"></div>
+        <p id="thresholds-error" class="ko small" hidden></p>
+        <button id="btn-thresholds-reset">Rétablir la légende SCOUT</button>
+      </details>
+    </section>
+
+    <p id="serial-support" class="small"></p>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="plan" aria-label="Plan de l'étage"></canvas>
+    <div id="drop-hint" class="drop-hint">Créez un projet, ou glissez ici le plan d'un étage (PNG, JPG).</div>
+  </main>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

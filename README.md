@@ -1,0 +1,109 @@
+# TETRA Walk-Test
+
+Outil open source de mesure de couverture TETRA indoor avec un terminal **Motorola MTP6550**,
+en remplacement de Motorola SCOUT (plus maintenu). Appli web pour **Edge / Chrome** sous Windows,
+qui lit la radio via l'API Web Serial : rien à installer, et elle fonctionne **hors ligne** sur
+site (sous-sols, parkings) une fois chargée.
+
+Fonctions (V1) : projet et plan d'étage (PNG, JPG), calibration d'échelle, connexion à la radio
+avec identité et panneau en direct, mesure par waypoints avec trace colorée selon des seuils RSSI
+configurables, export CSV / PNG, sauvegarde du projet, copie de secours automatique et reprise
+après incident.
+
+Le projet se limite à la **lecture des mesures** radio : il ne touche à aucune fonction de
+sécurité du réseau (authentification, chiffrement).
+
+## Utiliser l'appli
+
+Ouvrir l'appli dans Edge ou Chrome (version publiée : GitHub Pages du dépôt, ou en local, voir
+plus bas). Au premier chargement, elle est mise en cache pour fonctionner ensuite sans réseau.
+
+**Connexion** : fermer SCOUT (un seul programme à la fois sur le port), cliquer « Connecter la
+radio… » et choisir **« Motorola Solutions Portable Tetra Radio Port 1 »** (COM5 en général).
+Le « Port 2 » est l'interface AT de la radio et ne répond pas.
+
+Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
+
+### Mesurer
+
+1. Créer un projet (nom, bâtiment, étage, plan), et calibrer l'échelle si besoin (2 points +
+   distance connue).
+2. Connecter la radio, puis « Démarrer » et cliquer sa position de départ sur le plan.
+3. Marcher et cliquer sa position à chaque virage ou repère : les mesures reçues entre deux
+   clics sont réparties sur le tronçon, au prorata du temps (pauses exclues).
+4. « Pause » (ou barre d'espace) : les mesures ne sont plus enregistrées.
+   « Annuler le point » (Ctrl+Z) : retire le dernier clic, ses mesures seront replacées au suivant.
+5. « Fin de segment » / « Terminer » : cliquer d'abord le dernier point, sinon les mesures
+   reçues depuis le dernier clic sont perdues (l'appli demande confirmation).
+
+### Enregistrer et exporter
+
+- **Enregistrer** (Ctrl+S) : un fichier `<projet>.walktest.json` contient tout le projet (plans,
+  calibration, seuils, mesures placées, identité radio et **trames radio brutes** horodatées,
+  pour pouvoir tout recalculer plus tard). « Ouvrir… » reprend un projet.
+- **Exporter CSV** (par étage) : séparateur `;`, UTF-8 avec BOM, point décimal. Colonnes :
+  `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx`
+  (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré).
+- **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
+  (projet, étage, horaire, nombre de mesures, ISSI de la radio).
+
+### Incidents
+
+- **Copie de secours** : le projet en cours est copié automatiquement dans le navigateur
+  (IndexedDB) toutes les 3 s pendant la mesure. Après un crash, une fermeture d'onglet ou une
+  coupure, l'écran d'accueil propose **« Reprendre ce projet »** : une mesure en cours revient
+  **en pause au dernier point cliqué**, avec ses mesures en attente. Elle ne remplace pas
+  « Enregistrer » : elle est liée à ce navigateur et à cette adresse, et ne garde qu'un projet.
+- **Câble arraché** : la mesure passe en pause. Un câble arraché en plein flux **bloque la radio**
+  (elle ne répond plus, même rebranchée ; c'était déjà le cas avec SCOUT) : rebrancher le câble,
+  puis **éteindre et rallumer la radio**. L'appli le signale et se reconnecte toute seule une fois
+  la radio rallumée. Attendre « Radio en mesure », puis « Reprendre » à sa position.
+  Pour arrêter proprement, cliquer « Déconnecter » avant de débrancher.
+- Sans radio connectée, « Démarrer », « Reprendre » et les clics sur le plan demandent
+  confirmation : un tronçon parcouru sans radio n'a aucune mesure.
+
+## Développement
+
+Aucune dépendance ni étape de build : HTML, CSS et JavaScript (modules ES) servis tels quels.
+
+```bash
+python -m http.server 8000
+```
+
+Puis ouvrir dans Edge ou Chrome :
+
+- `http://localhost:8000/` : l'appli ;
+- `http://localhost:8000/tests/` : les tests (décodeur, géométrie, radio sur faux port,
+  session, exports, sauvegarde).
+
+Web Serial et le service worker exigent `https://` ou `localhost` (pas `file://`).
+Après une modification, incrémenter `VERSION` dans `sw.js` si la liste des fichiers change.
+
+**Données de test** : `tests/fixtures/demo.atp` est une vraie mesure SCOUT anonymisée par
+`tools/anonymize_atp.py` (identité radio, LA et canaux remplacés par des valeurs fictives,
+trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dépôt : le
+`.gitignore` exclut les `.atp`, les exports et les projets `.walktest.json`.
+
+| Chemin | Rôle |
+|---|---|
+| `js/protocol.js` | trames, commandes, décodage des blocs de mesure |
+| `js/radio.js` | connexion Web Serial, identité, flux de mesure, arrêt propre |
+| `js/session.js` | mesure par waypoints : segments, interpolation, pause, annulation |
+| `js/app.js` | interface (panneaux, calibration, mesure, fichiers, reconnexion) |
+| `js/planview.js` | affichage du plan : déplacement, zoom molette / pinch, clics |
+| `js/render.js` | dessin de la trace, de la légende et de l'échelle (écran et export) |
+| `js/export.js` | export CSV et PNG par étage |
+| `js/project.js` | modèle de projet et fichier `.walktest.json` |
+| `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
+| `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
+| `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |
+| `js/atp.js` | lecture des fichiers SCOUT `.atp` |
+| `js/simport.js` | radio simulée (`?demo`) |
+| `sw.js` | cache hors ligne |
+| `tests/` | tests navigateur et jeu de test anonymisé |
+| `tools/` | outils Python : lecture en direct, `.atp` → CSV, anonymisation |
+| `docs/PROTOCOL.md` | protocole du MTP6550 (rétro-ingénierie de SCOUT) |
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE). © 2026 Jean Pauwels (JEANVAL TECH SRL).
