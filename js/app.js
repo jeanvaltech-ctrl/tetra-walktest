@@ -1,7 +1,7 @@
 // app.js — point d'entrée de l'interface.
 import { PlanView } from './planview.js';
-import { createProject, addFloor, setCalibration, clearCalibration, serializeProject, deserializeProject } from './project.js';
-import { floorCsv, floorPng, fileSafe } from './export.js';
+import { createProject, addFloor, removeFloor, floorSampleCount, setCalibration, clearCalibration, serializeProject, deserializeProject } from './project.js';
+import { floorCsv, projectCsv, floorPng, fileSafe } from './export.js';
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
@@ -92,11 +92,12 @@ $('form-new').addEventListener('submit', async e => {
   try {
     const bmp = await loadImage(file);
     const project = createProject({ name: f.name.value.trim(), building: f.building.value.trim() });
-    addFloor(project, {
+    const floor = addFloor(project, {
       name: f.floor.value.trim(),
       image: { blob: file, name: file.name, type: file.type, width: bmp.width, height: bmp.height },
     });
-    showProject(project, bmp, null);
+    await showProject(project, null);
+    bitmaps.set(floor.id, bmp);
     state.dirty = true;
     setStatus('Projet créé');
     render();
@@ -107,18 +108,134 @@ $('form-new').addEventListener('submit', async e => {
   }
 });
 
-/** Affiche un projet (nouveau, ouvert ou récupéré) : 1er étage et sa session de mesure. */
-function showProject(project, bmp, handle, session = null) {
+// ---------- étages ----------
+const bitmaps = new Map();   // floorId -> plan décodé
+const views = new Map();     // floorId -> zoom / déplacement, pour retrouver chaque étage comme on l'a laissé
+
+async function floorBitmap(fl) {
+  if (!bitmaps.has(fl.id)) bitmaps.set(fl.id, await createImageBitmap(fl.image.blob));
+  return bitmaps.get(fl.id);
+}
+
+/** Affiche un projet (nouveau, ouvert ou récupéré) sur l'étage demandé (1er par défaut). */
+async function showProject(project, handle, floorId = null, session = null) {
   state.project = project;
-  state.floor = project.floors[0];
-  state.bitmap = bmp;
+  state.floor = null;
   state.fileHandle = handle;
   state.dirty = false;
-  Object.assign(state, { mode: 'idle', p1: null, p2: null });
-  attachSession(session || new Session(state.floor));
+  bitmaps.clear();
+  views.clear();
   $('thresholds').innerHTML = '';
   $('sec-recover').hidden = true;
+  $('form-floor').hidden = true;
+  await showFloor(project.floors.find(f => f.id === floorId) || project.floors[0], session);
+}
+
+/** Affiche un étage avec sa propre session de mesure. */
+async function showFloor(fl, session = null) {
+  if (state.floor) views.set(state.floor.id, { ...view.t });
+  const bmp = await floorBitmap(fl);
+  state.floor = fl;
+  state.bitmap = bmp;
+  Object.assign(state, { mode: 'idle', p1: null, p2: null, hover: null });
+  attachSession(session || new Session(fl));
   view.setImage(bmp);
+  const v = views.get(fl.id);
+  if (v) { Object.assign(view.t, v); view.changed(); }
+}
+
+/**
+ * Changement d'étage par l'utilisateur. Une mesure en cours est terminée sur l'ancien étage
+ * et reprend aussitôt sur le nouveau : il n'y a plus qu'à cliquer sa position de départ.
+ */
+async function switchFloor(fl) {
+  if (!fl || fl === state.floor) return;
+  const ses = state.session, was = ses.state;
+  if (state.mode !== 'idle') cancelCalibration();
+  if (was === 'walking' || was === 'paused') {
+    const n = ses.pending.length;
+    if (!confirm(`Terminer la mesure sur « ${state.floor.name} » et passer à « ${fl.name} » ?`
+      + (n ? `\n\n${n} mesure${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} depuis le dernier clic ${n > 1 ? 'seront perdues' : 'sera perdue'} : `
+        + 'annulez et cliquez d\'abord votre dernière position sur ce plan.' : ''))) return;
+  }
+  if (was !== 'idle') lostMessage(ses.stop());
+  await showFloor(fl);
+  if (was !== 'idle') {
+    if (radio.state === 'streaming') fl.radio = { ...radio.info };
+    state.session.start();
+    setStatus(`${fl.name} : cliquez votre position de départ sur le plan`);
+  } else {
+    setStatus(fl.name);
+  }
+  scheduleAutosave();     // la copie de secours retient l'étage affiché
+  render();
+}
+
+$('floor-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-floor]');
+  if (b) switchFloor(state.project.floors.find(f => f.id === b.dataset.floor));
+});
+
+$('btn-floor-add').addEventListener('click', () => {
+  const f = $('form-floor');
+  f.reset();
+  $('floor-error').hidden = true;
+  f.hidden = false;
+  f.floor.focus();
+});
+$('btn-floor-cancel').addEventListener('click', () => { $('form-floor').hidden = true; });
+
+$('form-floor').addEventListener('submit', e => runFileAction(async () => {
+  e.preventDefault();
+  const f = e.target, file = f.plan.files[0], err = $('floor-error');
+  err.hidden = true;
+  let bmp;
+  try { bmp = await loadImage(file); } catch (ex) { err.textContent = ex.message; err.hidden = false; return; }
+  const fl = addFloor(state.project, {
+    name: f.floor.value.trim(),
+    image: { blob: file, name: file.name, type: file.type, width: bmp.width, height: bmp.height },
+  });
+  bitmaps.set(fl.id, bmp);
+  f.hidden = true;
+  markDirty();
+  if (state.session.state === 'idle') { await showFloor(fl); setStatus(`Étage ajouté : ${fl.name}`); render(); }
+  else await switchFloor(fl);       // en pleine mesure : on enchaîne sur le nouvel étage
+}));
+
+$('btn-floor-rename').addEventListener('click', () => {
+  const name = prompt('Nouveau nom de l\'étage :', state.floor.name);
+  if (!name || !name.trim()) return;
+  state.floor.name = name.trim();
+  markDirty();
+  render();
+});
+
+$('btn-floor-delete').addEventListener('click', () => runFileAction(async () => {
+  const fl = state.floor, n = floorSampleCount(fl);
+  if (!confirm(`Supprimer l'étage « ${fl.name} »${n ? ` et ses ${nf(n)} mesures` : ''} ?\n\n`
+    + 'Il ne restera que dans un fichier projet déjà enregistré.')) return;
+  lostMessage(state.session.stop());
+  const next = removeFloor(state.project, fl.id);
+  bitmaps.delete(fl.id);
+  views.delete(fl.id);
+  state.floor = null;           // pas de vue à mémoriser pour l'étage supprimé
+  await showFloor(next);
+  markDirty();
+  setStatus(`Étage supprimé : ${fl.name}`);
+  render();
+}));
+
+function renderFloors() {
+  const p = state.project;
+  $('sec-floors').hidden = !p;
+  if (!p) return;
+  $('floor-list').innerHTML = p.floors.map(f => {
+    const n = floorSampleCount(f);
+    const meta = [n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure', f.calibration ? 'échelle' : ''].filter(Boolean).join(' · ');
+    return `<li><button class="floor-item" data-floor="${f.id}" aria-current="${f === state.floor}">`
+      + `<span>${esc(f.name)}</span><span class="meta">${meta}</span></button></li>`;
+  }).join('');
+  $('btn-floor-delete').disabled = p.floors.length < 2;
 }
 
 const abandonOk = () => !state.dirty || confirm('Abandonner le projet en cours ? Les dernières modifications ne sont pas enregistrées.');
@@ -127,6 +244,9 @@ $('btn-new-project').addEventListener('click', () => {
   if (!abandonOk()) return;
   attachSession(null);
   Object.assign(state, { project: null, floor: null, bitmap: null, fileHandle: null, dirty: false, mode: 'idle', p1: null, p2: null });
+  bitmaps.clear();
+  views.clear();
+  $('form-floor').hidden = true;
   autosave.clear();
   $('form-new').reset();
   $('thresholds').innerHTML = '';
@@ -155,10 +275,8 @@ async function offerRecovery() {
 $('btn-recover').addEventListener('click', () => runFileAction(async () => {
   const rec = recovered;
   const p = rec.project;
-  const i = Math.max(0, p.floors.findIndex(f => f.id === rec.floorId));
-  if (i > 0) p.floors.unshift(...p.floors.splice(i, 1));      // étage affiché en premier
-  const bmp = await createImageBitmap(p.floors[0].image.blob);
-  showProject(p, bmp, rec.fileHandle || null, Session.restore(p.floors[0], rec.session));
+  const fl = p.floors.find(f => f.id === rec.floorId) || p.floors[0];   // l'étage où l'on mesurait
+  await showProject(p, rec.fileHandle || null, fl.id, Session.restore(fl, rec.session));
   state.dirty = !!rec.dirty;
   const paused = state.session.state === 'paused';
   setStatus(paused ? 'Mesure récupérée, en pause au dernier point cliqué' : 'Projet récupéré');
@@ -201,13 +319,16 @@ async function saveBlob(makeBlob, name, type, handle = null) {
     await w.close();
     return handle;
   }
-  const blob = await makeBlob();
+  downloadBlob(await makeBlob(), name);
+  return null;
+}
+
+function downloadBlob(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  return null;
 }
 
 async function runFileAction(fn) {
@@ -243,9 +364,8 @@ async function openProject() {
     if (!file) return;
   }
   const project = await deserializeProject(await file.text());
-  const bmp = await createImageBitmap(project.floors[0].image.blob);
   attachSession(null);
-  showProject(project, bmp, handle);
+  await showProject(project, handle);
   setStatus(`Projet ouvert : ${file.name}`);
   render();
   await restartAutosave();
@@ -275,6 +395,25 @@ $('btn-export-png').addEventListener('click', () => runFileAction(async () => {
   setStatus('PNG exporté');
 }));
 
+// tous les étages d'un coup : PNG + CSV de chaque étage et un CSV commun, dans un dossier choisi
+$('btn-export-all').addEventListener('click', () => runFileAction(async () => {
+  const project = state.project, base = `${project.name} - `;
+  const dir = window.showDirectoryPicker ? await showDirectoryPicker({ id: 'exports', mode: 'readwrite' }) : null;
+  const files = project.floors.flatMap(fl => [
+    { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
+    { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl)], { type: 'text/csv' }) },
+  ]).concat({ name: `${base}tous les étages.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
+  for (const [i, f] of files.entries()) {
+    setStatus(`Export ${i + 1}/${files.length}…`);
+    const blob = await f.make(), name = fileSafe(f.name);
+    if (!dir) { downloadBlob(blob, name); continue; }
+    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await w.write(blob);
+    await w.close();
+  }
+  setStatus(`${files.length} fichiers exportés${dir ? ` dans « ${dir.name} »` : ''}`);
+}));
+
 function renderSaveState() {
   const el = $('save-state');
   if (!state.project) return;
@@ -295,7 +434,16 @@ stage.addEventListener('drop', e => {
   e.preventDefault();
   stage.classList.remove('dragover');
   if (!e.dataTransfer.files.length) return;
-  if (state.project) { setStatus('Un projet est déjà ouvert'); return; }
+  if (state.project) {
+    // projet ouvert : le plan déposé sert à ajouter un étage
+    const f = $('form-floor');
+    f.reset();
+    f.plan.files = e.dataTransfer.files;
+    f.hidden = false;
+    f.floor.focus();
+    setStatus(`Plan sélectionné : ${e.dataTransfer.files[0].name} — nommez le nouvel étage`);
+    return;
+  }
   const form = $('form-new');
   form.plan.files = e.dataTransfer.files;
   setStatus(`Plan sélectionné : ${e.dataTransfer.files[0].name}`);
@@ -454,6 +602,8 @@ function render() {
   $('sec-new').hidden = !!p;
   $('sec-project').hidden = $('sec-view').hidden = $('sec-scale').hidden = $('sec-thresholds').hidden = !p;
   renderMeasure();
+  renderFloors();
+  $('btn-export-all').hidden = !p || p.floors.length < 2;
   $('drop-hint').hidden = !!fl;
   $('project-title').textContent = p ? `${p.name}${fl ? ' — ' + fl.name : ''}` : '';
   document.title = p ? `${p.name} — TETRA Walk-Test` : 'TETRA Walk-Test';
@@ -492,7 +642,7 @@ function attachSession(ses) {
   if (old) old.stop();     // son écouteur ne réagit plus : ce n'est plus la session courante
   if (ses) ses.addEventListener('change', () => {
     if (ses !== state.session) return;
-    markDirty(); scheduleAutosave(); renderMeasure(); view.redraw();
+    markDirty(); scheduleAutosave(); renderMeasure(); renderFloors(); view.redraw();
   });
 }
 

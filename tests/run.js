@@ -8,8 +8,8 @@ import { Session, floorStats } from '../js/session.js';
 import { FakePort, radioFrame, cmdHex } from './fakeport.js';
 import { parseAtp } from '../js/atp.js';
 import { ViewTransform, metersPerPixel, niceLength } from '../js/geometry.js';
-import { setCalibration, createProject, addFloor, serializeProject, deserializeProject } from '../js/project.js';
-import { floorCsv, floorPng, caption, CSV_COLUMNS } from '../js/export.js';
+import { setCalibration, createProject, addFloor, removeFloor, floorSampleCount, serializeProject, deserializeProject } from '../js/project.js';
+import { floorCsv, projectCsv, floorPng, caption, CSV_COLUMNS } from '../js/export.js';
 import { AutoSave } from '../js/autosave.js';
 
 const ATP = 'fixtures/demo.atp';
@@ -291,6 +291,22 @@ await test('Export CSV : colonnes, tri, mètres, échappement', async () => {
   assert(r.segment === '1' && r.x === '150.0' && r.x_m === '15.00' && r.y_m === '15.00', lines[1]);
   assert(r.rssi === '-60' && r.n1_la === '1002' && r.n2_la === '', lines[1]);
   assert(rows.map(x => x.segment).join(',') === '1,1,2' && rows[2].time === '10:00:05.000', 'tri par heure');
+});
+
+await test('Plusieurs étages : CSV commun trié par heure, suppression d\'un étage', async () => {
+  const { project, floor } = await sampleProject();
+  const f2 = addFloor(project, { name: 'Étage -2', image: { ...floor.image } });
+  const t0 = floor.segments[0].samples[0].time;
+  f2.segments.push({ id: 's3', points: [{ x: 0, y: 0, ta: 0 }, { x: 10, y: 0, ta: 1 }],
+    samples: [{ ...floor.segments[0].samples[0], time: t0 + 2500, x: 5, y: 0 }] });
+  const lines = projectCsv(project).slice(1).trimEnd().split('\r\n').slice(1);
+  const floors = lines.map(l => l.split(';')[CSV_COLUMNS.indexOf('floor')]);
+  assert(floors.join(',') === 'Étage -1,Étage -1,Étage -2,Étage -1', floors.join(','));
+  assert(floorSampleCount(floor) === 3 && floorSampleCount(f2) === 1, 'comptage');
+  assert(removeFloor(project, floor.id) === f2 && project.floors.length === 1, 'suppression');
+  let err = null;
+  try { removeFloor(project, f2.id); } catch (e) { err = e; }
+  assert(err && project.floors.length === 1, 'le dernier étage a été supprimé');
 });
 
 await test('Fichier projet : enregistrer puis rouvrir à l\'identique', async () => {

@@ -72,6 +72,15 @@ table.neigh th:first-child, table.neigh td:first-child { text-align: left; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
 
 dl.stats { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+
+ul.floors { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.floor-item {
+  width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  text-align: left; padding: 6px 10px;
+}
+.floor-item .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.floor-item[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font-weight: 600; }
+#form-floor { margin-top: 10px; }
 details > summary {
   cursor: pointer; font-size: 13px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted);

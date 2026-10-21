@@ -59,6 +59,27 @@
       <dl id="measure-stats" class="info stats"></dl>
     </section>
 
+    <section id="sec-floors" hidden>
+      <h2>Étages</h2>
+      <ul id="floor-list" class="floors"></ul>
+      <div class="row">
+        <button id="btn-floor-add">Ajouter un étage…</button>
+        <button id="btn-floor-rename">Renommer…</button>
+        <button id="btn-floor-delete">Supprimer…</button>
+      </div>
+      <form id="form-floor" class="stack" hidden>
+        <label>Nom de l'étage
+          <input name="floor" required placeholder="ex. Étage -2" autocomplete="off"></label>
+        <label>Plan de l'étage (PNG, JPG)
+          <input name="plan" type="file" accept="image/png,image/jpeg" required></label>
+        <div class="row">
+          <button type="submit" class="primary">Ajouter</button>
+          <button type="button" id="btn-floor-cancel">Annuler</button>
+        </div>
+        <p id="floor-error" class="ko small" hidden></p>
+      </form>
+    </section>
+
     <section id="sec-recover" hidden>
       <h2>Reprendre</h2>
       <p id="recover-text"></p>
@@ -102,6 +123,9 @@
       <div class="row" style="margin-top:6px">
         <button id="btn-export-csv">Exporter CSV</button>
         <button id="btn-export-png">Exporter PNG</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btn-export-all" title="PNG et CSV de chaque étage, plus un CSV de tous les étages, dans un dossier">Exporter tous les étages…</button>
       </div>
       <p id="save-state" class="muted small"></p>
       <div class="row">

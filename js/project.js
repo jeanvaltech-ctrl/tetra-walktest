@@ -31,6 +31,17 @@ export function addFloor(project, { name, image }) {
   return floor;
 }
 
+/** Supprime un étage (jamais le dernier) ; retourne l'étage à afficher ensuite. */
+export function removeFloor(project, floorId) {
+  const i = project.floors.findIndex(f => f.id === floorId);
+  if (i < 0 || project.floors.length < 2) throw new Error('Un projet doit garder au moins un étage.');
+  project.floors.splice(i, 1);
+  return project.floors[Math.min(i, project.floors.length - 1)];
+}
+
+/** Nombre de mesures placées sur un étage. */
+export const floorSampleCount = floor => floor.segments.reduce((n, s) => n + s.samples.length, 0);
+
 /** Calibration par 2 points (coordonnées image) et distance réelle en mètres. */
 export function setCalibration(floor, p1, p2, meters) {
   const mPerPx = metersPerPixel(p1, p2, meters);

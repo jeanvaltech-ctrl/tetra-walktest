@@ -5,7 +5,7 @@ en remplacement de Motorola SCOUT (plus maintenu). Appli web pour **Edge / Chrom
 qui lit la radio via l'API Web Serial : rien à installer, et elle fonctionne **hors ligne** sur
 site (sous-sols, parkings) une fois chargée.
 
-Fonctions (V1) : projet et plan d'étage (PNG, JPG), calibration d'échelle, connexion à la radio
+Fonctions : projet multi-étages avec plans (PNG, JPG), calibration d'échelle, connexion à la radio
 avec identité et panneau en direct, mesure par waypoints avec trace colorée selon des seuils RSSI
 configurables, export CSV / PNG, sauvegarde du projet, copie de secours automatique et reprise
 après incident.
@@ -38,6 +38,14 @@ Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
 5. « Fin de segment » / « Terminer » : cliquer d'abord le dernier point, sinon les mesures
    reçues depuis le dernier clic sont perdues (l'appli demande confirmation).
 
+### Plusieurs étages
+
+Un projet = un bâtiment, avec autant d'étages que nécessaire, chacun avec son plan, son échelle
+et ses mesures (panneau **Étages**). « Ajouter un étage… » (ou glisser un plan sur la zone
+centrale) ; cliquer un étage pour l'afficher. **En pleine mesure**, cliquer d'abord son dernier
+point, puis l'étage suivant : la mesure se termine sur l'ancien étage et reprend aussitôt sur le
+nouveau, il n'y a plus qu'à cliquer sa position de départ.
+
 ### Enregistrer et exporter
 
 - **Enregistrer** (Ctrl+S) : un fichier `<projet>.walktest.json` contient tout le projet (plans,
@@ -48,6 +56,8 @@ Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
   (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
   (projet, étage, horaire, nombre de mesures, ISSI de la radio).
+- **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
+  un CSV commun « tous les étages » trié par heure.
 
 ### Incidents
 

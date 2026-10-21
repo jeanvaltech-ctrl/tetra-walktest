@@ -23,21 +23,27 @@ export function floorSamples(floor) {
     .sort((a, b) => a.time - b.time);
 }
 
-/** CSV séparé par « ; », UTF-8 avec BOM (accents lisibles dans Excel), point décimal. */
-export function floorCsv(floor) {
+/** Lignes CSV d'un étage, avec leur heure pour pouvoir trier plusieurs étages ensemble. */
+function csvLines(floor) {
   const m = floor.calibration ? floor.calibration.mPerPx : null;
-  const lines = [CSV_COLUMNS.join(';')];
-  for (const s of floorSamples(floor)) {
+  return floorSamples(floor).map(s => {
     const d = new Date(s.time);
     const row = {
       ...s, date: localDate(d), time: localTime(d), floor: floor.name,
       x: s.x.toFixed(1), y: s.y.toFixed(1),
       x_m: m ? (s.x * m).toFixed(2) : '', y_m: m ? (s.y * m).toFixed(2) : '',
     };
-    lines.push(CSV_COLUMNS.map(c => csvCell(row[c])).join(';'));
-  }
-  return '﻿' + lines.join('\r\n') + '\r\n';
+    return { time: s.time, line: CSV_COLUMNS.map(c => csvCell(row[c])).join(';') };
+  });
 }
+
+/** CSV séparé par « ; », UTF-8 avec BOM (accents lisibles dans Excel), point décimal. */
+const csvText = lines => '﻿' + [CSV_COLUMNS.join(';'), ...lines.map(l => l.line)].join('\r\n') + '\r\n';
+
+export const floorCsv = floor => csvText(csvLines(floor));
+
+/** Tous les étages dans un seul CSV (colonne floor), triés par heure. */
+export const projectCsv = project => csvText(project.floors.flatMap(csvLines).sort((a, b) => a.time - b.time));
 
 /** Texte du bandeau sous le plan exporté. */
 export function caption(project, floor) {
