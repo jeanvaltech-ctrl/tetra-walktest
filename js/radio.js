@@ -7,6 +7,7 @@
 //   measure   {time, rec, snapshot}   nouveau point (bloc cellule serveuse)
 //   lost      la radio a été débranchée
 import { buildCmd, CMD, Deframer, decodeRecords, MeasureState, parseInfo, INFO } from './protocol.js';
+import { t } from './i18n.js';
 
 export const RADIO_VID = 0x0cad;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -38,7 +39,7 @@ export class Radio extends EventTarget {
   setState(state, message = '') { this.state = state; this.emit('state', { state, message }); }
 
   async connect(port) {
-    if (this.port) throw new Error('Une radio est déjà connectée.');
+    if (this.port) throw new Error(t('radio.alreadyConnected'));
     this.reset();
     this.info = {};
     this.setState('connecting');
@@ -46,7 +47,7 @@ export class Radio extends EventTarget {
       await port.open({ baudRate: 115200 });   // débit sans effet (USB)
     } catch (e) {
       this.setState('disconnected');
-      throw Object.assign(new Error(`Impossible d'ouvrir le port (${e.message}). SCOUT ou mtp_live.py est peut-être encore ouvert.`), { code: 'open' });
+      throw Object.assign(new Error(t('radio.openFailed', { msg: e.message })), { code: 'open' });
     }
     this.port = port;
     this.reading = this.readLoop(port);
@@ -60,9 +61,7 @@ export class Radio extends EventTarget {
       }
       if (!Object.keys(this.info).length) {
         // port ouvert mais aucun octet : Port 2 choisi, ou radio bloquée (câble arraché en plein flux)
-        throw Object.assign(new Error('Aucune réponse de la radio. Vérifiez que le port choisi est « Portable Tetra Radio Port 1 ». '
-          + 'Si c\'est le bon port, éteignez puis rallumez la radio (câble branché) : après un câble arraché '
-          + 'en pleine mesure, la radio ne répond plus jusqu\'à son redémarrage.'), { code: 'silent' });
+        throw Object.assign(new Error(t('radio.silent')), { code: 'silent' });
       }
       this.emit('identity', this.info);
       await this.send(CMD.start);
@@ -110,7 +109,7 @@ export class Radio extends EventTarget {
     this.port = null;
     this.failWaiters();
     port.close().catch(() => {});
-    this.setState('disconnected', 'Radio débranchée.');
+    this.setState('disconnected', t('radio.unplugged'));
     this.emit('lost');
   }
 
@@ -118,7 +117,7 @@ export class Radio extends EventTarget {
   send(body) {
     const port = this.port;
     this.writeChain = this.writeChain.catch(() => {}).then(async () => {
-      if (!port || !port.writable) throw new Error('Port fermé.');
+      if (!port || !port.writable) throw new Error(t('radio.portClosed'));
       const w = port.writable.getWriter();
       try { await w.write(buildCmd(body)); } finally { w.releaseLock(); }
     });

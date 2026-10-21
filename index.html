@@ -4,190 +4,194 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TETRA Walk-Test</title>
-<meta name="description" content="Mesure de couverture TETRA indoor avec un Motorola MTP6550.">
+<meta name="description" content="Indoor TETRA coverage measurement with a Motorola MTP6550 / Mesure de couverture TETRA indoor / Indoor TETRA-dekkingsmeting.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<!-- Textes : clés data-i18n*, traduites par js/i18n.js à partir de js/strings.js (FR / NL / EN). -->
 <header class="bar">
   <h1>TETRA Walk-Test</h1>
   <span id="project-title" class="project-title"></span>
-  <span id="status" class="status">Prêt</span>
-  <span id="radio-pill" class="pill">Radio déconnectée</span>
+  <span id="status" class="status"></span>
+  <span id="radio-pill" class="pill"></span>
+  <div class="lang" role="group" data-i18n-aria="lang.choose">
+    <button data-lang="fr">FR</button><button data-lang="nl">NL</button><button data-lang="en">EN</button>
+  </div>
 </header>
 <div class="layout">
   <aside class="side">
     <section id="sec-radio">
-      <h2>Radio</h2>
-      <p id="radio-state" class="muted">Non connectée.</p>
+      <h2 data-i18n="sec.radio">Radio</h2>
+      <p id="radio-state" class="muted"></p>
       <dl id="radio-info" class="info" hidden></dl>
       <div class="row">
-        <button id="btn-connect" class="primary">Connecter la radio…</button>
-        <button id="btn-disconnect" hidden>Déconnecter</button>
+        <button id="btn-connect" class="primary" data-i18n="btn.connect">Connecter la radio…</button>
+        <button id="btn-disconnect" data-i18n="btn.disconnect" hidden>Déconnecter</button>
       </div>
       <p id="radio-error" class="ko small" hidden></p>
     </section>
 
     <section id="sec-live" hidden>
-      <h2>Mesure en direct</h2>
+      <h2 data-i18n="sec.live">Mesure en direct</h2>
       <div class="serving">
         <div id="live-rssi" class="rssi-badge"><b>—</b><span>dBm</span></div>
         <dl class="info">
           <dt>LA</dt><dd id="live-la">—</dd>
-          <dt>Canal</dt><dd id="live-ch">—</dd>
+          <dt data-i18n="live.channel">Canal</dt><dd id="live-ch">—</dd>
           <dt>C1</dt><dd id="live-c1">—</dd>
         </dl>
       </div>
       <p id="live-astrid" class="verdict"></p>
       <table class="neigh">
-        <thead><tr><th>Voisine (LA)</th><th>Canal</th><th>RSSI</th><th>Cx</th></tr></thead>
+        <thead><tr><th data-i18n="live.neighbour">Voisine (LA)</th><th data-i18n="live.channel">Canal</th><th>RSSI</th><th>Cx</th></tr></thead>
         <tbody id="live-neigh"></tbody>
       </table>
       <p id="live-age" class="muted small"></p>
     </section>
 
     <section id="sec-measure" hidden>
-      <h2>Mesure</h2>
+      <h2 data-i18n="sec.measure">Mesure</h2>
       <p id="measure-help" class="help"></p>
       <div class="row">
-        <button id="btn-start" class="primary">Démarrer</button>
-        <button id="btn-pause" title="Barre d'espace">Pause</button>
-        <button id="btn-endseg">Fin de segment</button>
-        <button id="btn-undo" title="Ctrl+Z">Annuler le point</button>
-        <button id="btn-stop">Terminer</button>
+        <button id="btn-start" class="primary" data-i18n="btn.start">Démarrer</button>
+        <button id="btn-pause" data-i18n-title="title.space" data-i18n="btn.pause">Pause</button>
+        <button id="btn-endseg" data-i18n="btn.endseg">Fin de segment</button>
+        <button id="btn-undo" title="Ctrl+Z" data-i18n="btn.undo">Annuler le point</button>
+        <button id="btn-stop" data-i18n="btn.stop">Terminer</button>
       </div>
       <dl id="measure-stats" class="info stats"></dl>
     </section>
 
     <section id="sec-floors" hidden>
-      <h2>Étages</h2>
+      <h2 data-i18n="sec.floors">Étages</h2>
       <div class="row floor-pick">
-        <button id="btn-floor-down" title="Étage inférieur (Page↓)" aria-label="Étage inférieur">▼</button>
-        <select id="floor-select" aria-label="Étage affiché"></select>
-        <button id="btn-floor-up" title="Étage supérieur (Page↑)" aria-label="Étage supérieur">▲</button>
+        <button id="btn-floor-down" data-i18n-title="title.floorDown" data-i18n-aria="aria.floorDown">▼</button>
+        <select id="floor-select" data-i18n-aria="aria.floorSelect"></select>
+        <button id="btn-floor-up" data-i18n-title="title.floorUp" data-i18n-aria="aria.floorUp">▲</button>
       </div>
       <p id="floor-meta" class="muted small"></p>
       <div class="row">
-        <button id="btn-floor-add">Ajouter un étage…</button>
-        <button id="btn-floor-rename">Renommer…</button>
-        <button id="btn-floor-delete">Supprimer…</button>
+        <button id="btn-floor-add" data-i18n="btn.floorAdd">Ajouter un étage…</button>
+        <button id="btn-floor-rename" data-i18n="btn.rename">Renommer…</button>
+        <button id="btn-floor-delete" data-i18n="btn.deleteFloor">Supprimer…</button>
       </div>
       <form id="form-floor" class="stack" hidden>
-        <label>Nom de l'étage
-          <input name="floor" required placeholder="ex. Étage -2" autocomplete="off"></label>
-        <label>Plan de l'étage (PNG, JPG)
+        <label><span data-i18n="label.floorName">Nom de l'étage</span>
+          <input name="floor" required data-i18n-placeholder="ph.floorName" autocomplete="off"></label>
+        <label><span data-i18n="label.floorPlan">Plan de l'étage (PNG, JPG)</span>
           <input name="plan" type="file" accept="image/png,image/jpeg" required></label>
         <div class="row">
-          <button type="submit" class="primary">Ajouter</button>
-          <button type="button" id="btn-floor-cancel">Annuler</button>
+          <button type="submit" class="primary" data-i18n="btn.add">Ajouter</button>
+          <button type="button" id="btn-floor-cancel" data-i18n="btn.cancel">Annuler</button>
         </div>
         <p id="floor-error" class="ko small" hidden></p>
       </form>
     </section>
 
     <section id="sec-recover" hidden>
-      <h2>Reprendre</h2>
+      <h2 data-i18n="sec.recover">Reprendre</h2>
       <p id="recover-text"></p>
       <div class="row">
-        <button id="btn-recover" class="primary">Reprendre ce projet</button>
-        <button id="btn-recover-discard">Ignorer</button>
+        <button id="btn-recover" class="primary" data-i18n="btn.recover">Reprendre ce projet</button>
+        <button id="btn-recover-discard" data-i18n="btn.ignore">Ignorer</button>
       </div>
     </section>
 
     <section id="sec-new">
-      <h2>Nouveau projet</h2>
+      <h2 data-i18n="sec.new">Nouveau projet</h2>
       <form id="form-new" class="stack">
-        <label>Nom du projet
-          <input name="name" required placeholder="ex. Centre commercial, Bruxelles" autocomplete="off"></label>
-        <label>Bâtiment / adresse
+        <label><span data-i18n="label.projectName">Nom du projet</span>
+          <input name="name" required data-i18n-placeholder="ph.projectName" autocomplete="off"></label>
+        <label><span data-i18n="label.building">Bâtiment / adresse</span>
           <input name="building" autocomplete="off"></label>
-        <label>Étage
-          <input name="floor" required value="Étage 0" autocomplete="off"></label>
-        <label>Plan de l'étage (PNG, JPG)
+        <label><span data-i18n="label.floor">Étage</span>
+          <input name="floor" required data-i18n-value="default.floor" autocomplete="off"></label>
+        <label><span data-i18n="label.floorPlan">Plan de l'étage (PNG, JPG)</span>
           <input name="plan" type="file" accept="image/png,image/jpeg" required></label>
-        <button type="submit" class="primary">Créer le projet</button>
+        <button type="submit" class="primary" data-i18n="btn.createProject">Créer le projet</button>
         <p id="new-error" class="ko" hidden></p>
       </form>
-      <p class="muted small">ou travailler dans un dossier projet (sous-dossier « plans » avec un plan par étage) :</p>
-      <button class="btn-open-folder primary">Ouvrir un dossier projet…</button>
-      <p class="muted small">ou reprendre un fichier projet enregistré :</p>
-      <button class="btn-open">Ouvrir un projet…</button>
+      <p class="muted small" data-i18n="new.orFolder">ou travailler dans un dossier projet (sous-dossier « plans » avec un plan par étage) :</p>
+      <button class="btn-open-folder primary" data-i18n="btn.openFolder">Ouvrir un dossier projet…</button>
+      <p class="muted small" data-i18n="new.orFile">ou reprendre un fichier projet enregistré :</p>
+      <button class="btn-open" data-i18n="btn.openProject">Ouvrir un projet…</button>
       <input id="open-file" type="file" accept=".json,application/json" hidden>
     </section>
 
     <section id="sec-project" hidden>
-      <h2>Projet</h2>
+      <h2 data-i18n="sec.project">Projet</h2>
       <dl class="info">
-        <dt>Projet</dt><dd id="p-name"></dd>
-        <dt>Bâtiment</dt><dd id="p-building"></dd>
-        <dt id="p-folder-label">Dossier</dt><dd id="p-folder"></dd>
-        <dt>Étage</dt><dd id="p-floor"></dd>
-        <dt>Plan</dt><dd id="p-plan"></dd>
+        <dt data-i18n="p.project">Projet</dt><dd id="p-name"></dd>
+        <dt data-i18n="p.building">Bâtiment</dt><dd id="p-building"></dd>
+        <dt id="p-folder-label" data-i18n="p.folder">Dossier</dt><dd id="p-folder"></dd>
+        <dt data-i18n="p.floor">Étage</dt><dd id="p-floor"></dd>
+        <dt data-i18n="p.plan">Plan</dt><dd id="p-plan"></dd>
       </dl>
       <div class="row">
-        <button id="btn-save" class="primary" title="Ctrl+S">Enregistrer</button>
-        <button id="btn-save-as">Enregistrer sous…</button>
+        <button id="btn-save" class="primary" title="Ctrl+S" data-i18n="btn.save">Enregistrer</button>
+        <button id="btn-save-as" data-i18n="btn.saveAs">Enregistrer sous…</button>
       </div>
       <div class="row" style="margin-top:6px">
-        <button id="btn-export-csv">Exporter CSV</button>
-        <button id="btn-export-png">Exporter PNG</button>
+        <button id="btn-export-csv" data-i18n="btn.exportCsv">Exporter CSV</button>
+        <button id="btn-export-png" data-i18n="btn.exportPng">Exporter PNG</button>
       </div>
       <div class="row" style="margin-top:6px">
-        <button id="btn-export-all" title="PNG et CSV de chaque étage, plus un CSV de tous les étages, dans un dossier">Exporter tous les étages…</button>
+        <button id="btn-export-all" data-i18n-title="title.exportAll" data-i18n="btn.exportAll">Exporter tous les étages…</button>
       </div>
       <p id="save-state" class="muted small"></p>
       <div class="row">
-        <button id="btn-new-project">Nouveau projet…</button>
-        <button class="btn-open-folder">Ouvrir un dossier…</button>
-        <button class="btn-open">Ouvrir…</button>
+        <button id="btn-new-project" data-i18n="btn.newProject">Nouveau projet…</button>
+        <button class="btn-open-folder" data-i18n="btn.openFolderShort">Ouvrir un dossier…</button>
+        <button class="btn-open" data-i18n="btn.open">Ouvrir…</button>
       </div>
     </section>
 
     <section id="sec-view" hidden>
-      <h2>Affichage</h2>
+      <h2 data-i18n="sec.view">Affichage</h2>
       <div class="row">
-        <button id="zoom-out" title="Zoom arrière (−)" aria-label="Zoom arrière">−</button>
-        <button id="zoom-in" title="Zoom avant (+)" aria-label="Zoom avant">+</button>
-        <button id="zoom-fit" title="Ajuster à la vue (0)">Ajuster</button>
+        <button id="zoom-out" data-i18n-title="title.zoomOut" data-i18n-aria="title.zoomOut">−</button>
+        <button id="zoom-in" data-i18n-title="title.zoomIn" data-i18n-aria="title.zoomIn">+</button>
+        <button id="zoom-fit" data-i18n-title="title.fit" data-i18n="btn.fit">Ajuster</button>
         <span id="zoom-level" class="muted"></span>
       </div>
-      <p class="muted small">Glisser pour déplacer le plan, molette pour zoomer.</p>
+      <p class="muted small" data-i18n="view.help">Glisser pour déplacer le plan, molette pour zoomer.</p>
     </section>
 
     <section id="sec-scale" hidden>
-      <h2>Échelle</h2>
+      <h2 data-i18n="sec.scale">Échelle</h2>
       <p id="scale-status"></p>
       <p id="calib-help" class="help" hidden></p>
       <form id="form-dist" class="stack" hidden>
-        <label>Distance réelle entre les 2 points (m)
+        <label><span data-i18n="label.distance">Distance réelle entre les 2 points (m)</span>
           <input name="meters" type="number" min="0.01" step="0.01" required></label>
         <div class="row">
-          <button type="submit" class="primary">Valider</button>
-          <button type="button" class="calib-cancel">Annuler</button>
+          <button type="submit" class="primary" data-i18n="btn.confirm">Valider</button>
+          <button type="button" class="calib-cancel" data-i18n="btn.cancel">Annuler</button>
         </div>
       </form>
       <div class="row" id="calib-actions">
-        <button id="btn-calib">Calibrer…</button>
-        <button id="btn-calib-clear" hidden>Supprimer</button>
-        <button class="calib-cancel" hidden>Annuler</button>
+        <button id="btn-calib" data-i18n="btn.calibrate">Calibrer…</button>
+        <button id="btn-calib-clear" data-i18n="btn.remove" hidden>Supprimer</button>
+        <button class="calib-cancel" data-i18n="btn.cancel" hidden>Annuler</button>
       </div>
     </section>
 
     <section id="sec-thresholds" hidden>
       <details>
-        <summary>Seuils RSSI et critère ASTRID</summary>
-        <p class="muted small">Couleur de la trace selon le RSSI de la cellule serveuse (dBm).</p>
+        <summary data-i18n="summary.thresholds">Seuils RSSI et critère ASTRID</summary>
+        <p class="muted small" data-i18n="thresholds.help">Couleur de la trace selon le RSSI de la cellule serveuse (dBm).</p>
         <div id="thresholds" class="thresholds"></div>
         <p id="thresholds-error" class="ko small" hidden></p>
-        <button id="btn-thresholds-reset">Rétablir la légende SCOUT</button>
-        <p class="muted small" style="margin-top:12px">Critère ASTRID : niveau meilleur que le seuil sur le pourcentage
+        <button id="btn-thresholds-reset" data-i18n="btn.resetScout">Rétablir la légende SCOUT</button>
+        <p class="muted small" style="margin-top:12px" data-i18n="crit.help">Critère ASTRID : niveau meilleur que le seuil sur le pourcentage
           demandé de la surface (approchée par la longueur parcourue).</p>
         <div class="row criterion">
-          <label>&gt; <input id="crit-rssi" type="number" step="1" max="0" min="-140" aria-label="Seuil ASTRID (dBm)"> dBm</label>
-          <label>sur <input id="crit-pct" type="number" step="1" min="1" max="100" aria-label="Pourcentage exigé"> %</label>
+          <label>&gt; <input id="crit-rssi" type="number" step="1" max="0" min="-140" data-i18n-aria="aria.critRssi"> dBm</label>
+          <label><span data-i18n="crit.over">sur</span> <input id="crit-pct" type="number" step="1" min="1" max="100" data-i18n-aria="aria.critPct"> %</label>
         </div>
-        <button id="btn-criterion-reset">Rétablir ASTRID (&gt; -88 dBm, 95 %)</button>
+        <button id="btn-criterion-reset" data-i18n="btn.resetAstrid">Rétablir ASTRID (&gt; -88 dBm, 95 %)</button>
       </details>
     </section>
 
@@ -195,8 +199,8 @@
   </aside>
 
   <main class="stage" id="stage">
-    <canvas id="plan" aria-label="Plan de l'étage"></canvas>
-    <div id="drop-hint" class="drop-hint">Créez un projet, ou glissez ici le plan d'un étage (PNG, JPG).</div>
+    <canvas id="plan" data-i18n-aria="aria.plan"></canvas>
+    <div id="drop-hint" class="drop-hint" data-i18n="drop.hint">Créez un projet, ou glissez ici le plan d'un étage (PNG, JPG).</div>
   </main>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

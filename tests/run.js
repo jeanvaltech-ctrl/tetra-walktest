@@ -13,6 +13,10 @@ import { floorCsv, projectCsv, floorPng, caption, CSV_COLUMNS } from '../js/expo
 import { AutoSave } from '../js/autosave.js';
 import { sampleOk, floorCompliance, fmtPct, complianceText } from '../js/criterion.js';
 import { readProjectFolder, newPlans, floorNameFromFile, floorNumber, compareFloorNames } from '../js/folder.js';
+import { setLang, t, LANGS } from '../js/i18n.js';
+import { STRINGS } from '../js/strings.js';
+
+setLang('fr', false);   // les messages vérifiés ci-dessous sont en français
 
 const ATP = 'fixtures/demo.atp';
 const GOLDEN = 'fixtures/demo_mtp_trace.csv';
@@ -423,6 +427,33 @@ await test('Copie de secours : écriture incrémentale des trames et relecture',
   assert(JSON.stringify(f.segments) === JSON.stringify(floor.segments), 'segments');
   await a.clear();
   assert(await new AutoSave(name).load() === null, 'effacement');
+});
+
+// ---------- langues ----------
+await test('Langues : chaque texte existe en FR, NL et EN', () => {
+  const missing = Object.entries(STRINGS).flatMap(([k, e]) => LANGS.filter(l => !(l in e)).map(l => `${k}:${l}`));
+  assert(!missing.length, 'traductions manquantes : ' + missing.join(', '));
+  const html = document.createElement('div');
+  return fetch('../index.html').then(r => r.text()).then(src => {
+    html.innerHTML = src;
+    const keys = [...html.querySelectorAll('[data-i18n],[data-i18n-title],[data-i18n-placeholder],[data-i18n-aria],[data-i18n-value]')]
+      .flatMap(el => ['i18n', 'i18nTitle', 'i18nPlaceholder', 'i18nAria', 'i18nValue'].map(a => el.dataset[a]).filter(Boolean));
+    const unknown = keys.filter(k => !STRINGS[k]);
+    assert(!unknown.length, 'clés inconnues dans index.html : ' + unknown.join(', '));
+  });
+});
+
+await test('Langues : pluriels et paramètres', () => {
+  assert(t('floor.segments', { n: 0 }) === '0 segment', 'FR : 0 au singulier');
+  setLang('nl', false);
+  assert(t('floor.count', { n: 0 }) === 'geen metingen' && t('floor.count', { n: 1 }) === '1 meting', t('floor.count', { n: 1 }));
+  assert(t('floor.segments', { n: 0 }) === '0 segmenten' && t('floor.segments', { n: 1 }) === '1 segment', 'NL : 0 au pluriel');
+  assert(t('notify.exportProgress', { i: 2, n: 9 }) === 'Exporteren 2/9…', t('notify.exportProgress', { i: 2, n: 9 }));
+  setLang('en', false);
+  assert(t('floor.count', { n: 1234 }) === '1,234 measurements', t('floor.count', { n: 1234 }));
+  assert(t('floor.segments', { n: 0 }) === '0 segments', 'EN : 0 au pluriel');
+  setLang('fr', false);
+  assert(t('floor.count', { n: 2 }) === '2 mesures', t('floor.count', { n: 2 }));
 });
 
 const ko = results.filter(r => !r.ok).length;

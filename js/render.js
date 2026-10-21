@@ -3,9 +3,10 @@
 // k : facteur d'épaisseur / de taille de texte (1 à l'écran, plus grand à l'export).
 import { niceLength } from './geometry.js';
 import { legendItems, rssiColor } from './thresholds.js';
+import { nf } from './i18n.js';
 
+export { nf };   // formatage des nombres selon la langue choisie
 export const FONT = 'system-ui, "Segoe UI", sans-serif';
-export const nf = (v, d = 0) => v.toLocaleString('fr-BE', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const fmtMeters = m => m >= 1 ? `${nf(m, m < 10 ? 1 : 0)} m` : `${nf(m * 100)} cm`;
 
 export function drawLabel(ctx, text, x, y) {

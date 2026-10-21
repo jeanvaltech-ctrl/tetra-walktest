@@ -1,5 +1,11 @@
 # TETRA Walk-Test
 
+> **EN** — Open-source indoor TETRA coverage survey tool for the **Motorola MTP6550**, replacing
+> Motorola SCOUT. Web app for Edge / Chrome (Web Serial, works offline once loaded), interface in
+> **French, Dutch and English**: floor plans, live serving/neighbour cells, waypoint walk-test with
+> RSSI-coloured trace, real-time ASTRID compliance (> -88 dBm on 95 % of the floor area), CSV / PNG
+> export. Live app: https://jeanvaltech-ctrl.github.io/tetra-walktest/ — documentation below is in French.
+
 Outil open source de mesure de couverture TETRA indoor avec un terminal **Motorola MTP6550**,
 en remplacement de Motorola SCOUT (plus maintenu). Appli web pour **Edge / Chrome** sous Windows,
 qui lit la radio via l'API Web Serial : rien à installer, et elle fonctionne **hors ligne** sur
@@ -25,6 +31,9 @@ radio… » et choisir **« Motorola Solutions Portable Tetra Radio Port 1 »** 
 Le « Port 2 » est l'interface AT de la radio et ne répond pas.
 
 Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
+
+**Langue** : français, néerlandais ou anglais (boutons FR | NL | EN en haut à droite). Par défaut,
+la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
 
 ### Mesurer
 
@@ -146,6 +155,8 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `js/project.js` | modèle de projet et fichier `.walktest.json` |
 | `js/folder.js` | dossier projet : plans, tri des étages, projet enregistré |
 | `js/criterion.js` | critère ASTRID : conformité par mesure et par étage |
+| `js/strings.js` | **tous les textes de l'interface, FR / NL / EN côte à côte** (à relire / compléter ici) |
+| `js/i18n.js` | choix de la langue, traduction (`t()`), formatage des nombres |
 | `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
 | `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
 | `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |

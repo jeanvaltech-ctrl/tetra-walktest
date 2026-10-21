@@ -4,6 +4,7 @@
 import { metersPerPixel } from './geometry.js';
 import { DEFAULT_THRESHOLDS } from './thresholds.js';
 import { DEFAULT_CRITERION } from './criterion.js';
+import { t } from './i18n.js';
 
 export const FORMAT = 'tetra-walktest';
 export const FORMAT_VERSION = 1;
@@ -36,7 +37,7 @@ export function addFloor(project, { name, image }) {
 /** Supprime un étage (jamais le dernier) ; retourne l'étage à afficher ensuite. */
 export function removeFloor(project, floorId) {
   const i = project.floors.findIndex(f => f.id === floorId);
-  if (i < 0 || project.floors.length < 2) throw new Error('Un projet doit garder au moins un étage.');
+  if (i < 0 || project.floors.length < 2) throw new Error(t('err.keepOneFloor'));
   project.floors.splice(i, 1);
   return project.floors[Math.min(i, project.floors.length - 1)];
 }
@@ -47,7 +48,7 @@ export const floorSampleCount = floor => floor.segments.reduce((n, s) => n + s.s
 /** Calibration par 2 points (coordonnées image) et distance réelle en mètres. */
 export function setCalibration(floor, p1, p2, meters) {
   const mPerPx = metersPerPixel(p1, p2, meters);
-  if (!mPerPx) throw new Error('Calibration invalide : points confondus ou distance nulle.');
+  if (!mPerPx) throw new Error(t('err.calibInvalid'));
   floor.calibration = { p1, p2, meters, mPerPx };
   return floor.calibration;
 }
@@ -72,9 +73,9 @@ export async function serializeProject(project) {
 
 export async function deserializeProject(text) {
   let p;
-  try { p = JSON.parse(text); } catch { throw new Error('Ce fichier n\'est pas un projet TETRA Walk-Test (JSON illisible).'); }
-  if (!p || p.format !== FORMAT || !Array.isArray(p.floors)) throw new Error('Ce fichier n\'est pas un projet TETRA Walk-Test.');
-  if (p.version > FORMAT_VERSION) throw new Error(`Projet enregistré par une version plus récente (format ${p.version}) : mettez l'appli à jour.`);
+  try { p = JSON.parse(text); } catch { throw new Error(t('err.notProjectJson')); }
+  if (!p || p.format !== FORMAT || !Array.isArray(p.floors)) throw new Error(t('err.notProject'));
+  if (p.version > FORMAT_VERSION) throw new Error(t('err.newerVersion', { v: p.version }));
   p.criterion ??= { ...DEFAULT_CRITERION };   // projets enregistrés avant le critère ASTRID
   for (const f of p.floors) {
     const { data, ...image } = f.image;

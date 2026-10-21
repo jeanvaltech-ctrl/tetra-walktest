@@ -12,6 +12,7 @@ import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
 import { DEFAULT_CRITERION, sampleOk, floorCompliance, fmtPct } from './criterion.js';
 import { nf, fmtMeters, drawLabel, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
+import { t, applyDom, setLang, getLang, locale } from './i18n.js';
 
 const $ = id => document.getElementById(id);
 
@@ -56,7 +57,7 @@ async function autosaveNow() {
     renderSaveState();
   } catch (e) {
     console.warn('Sauvegarde automatique :', e);
-    setStatus(`Copie de secours impossible : ${e.message}`);
+    setStatus(t('status.backupFailed', { msg: e.message }));
   }
 }
 
@@ -95,9 +96,9 @@ function notify(text, kind = 'ok', ms = 5000) {
 
 // ---------- chargement du plan ----------
 async function loadImage(file) {
-  if (!/^image\/(png|jpeg)$/.test(file.type)) throw new Error(`Format non pris en charge (${file.type || file.name}) : PNG ou JPG uniquement.`);
+  if (!/^image\/(png|jpeg)$/.test(file.type)) throw new Error(t('err.format', { type: file.type || file.name }));
   try { return await createImageBitmap(file); }
-  catch { throw new Error(`Impossible de lire l'image « ${file.name} ».`); }
+  catch { throw new Error(t('err.image', { name: file.name })); }
 }
 
 $('form-new').addEventListener('submit', async e => {
@@ -115,7 +116,7 @@ $('form-new').addEventListener('submit', async e => {
     await showProject(project, null);
     bitmaps.set(floor.id, bmp);
     state.dirty = true;
-    setStatus('Projet créé');
+    setStatus(t('status.projectCreated'));
     render();
     await restartAutosave();
   } catch (ex) {
@@ -171,17 +172,14 @@ async function switchFloor(fl) {
   const ses = state.session, was = ses.state;
   if (state.mode !== 'idle') cancelCalibration();
   if (was === 'walking' || was === 'paused') {
-    const n = ses.pending.length;
-    if (!confirm(`Terminer la mesure sur « ${state.floor.name} » et passer à « ${fl.name} » ?`
-      + (n ? `\n\n${n} mesure${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} depuis le dernier clic ${n > 1 ? 'seront perdues' : 'sera perdue'} : `
-        + 'annulez et cliquez d\'abord votre dernière position sur ce plan.' : ''))) return;
+    if (!confirm(t('confirm.switchFloor', { from: state.floor.name, to: fl.name, n: ses.pending.length }))) return;
   }
   if (was !== 'idle') lostMessage(ses.stop());
   await showFloor(fl);
   if (was !== 'idle') {
     if (radio.state === 'streaming') fl.radio = { ...radio.info };
     state.session.start();
-    setStatus(`${fl.name} : cliquez votre position de départ sur le plan`);
+    setStatus(t('status.floorStart', { floor: fl.name }));
   } else {
     setStatus(fl.name);
   }
@@ -232,12 +230,12 @@ $('form-floor').addEventListener('submit', e => runFileAction(async () => {
   state.project.floors.sort((a, b) => compareFloorNames(a.name, b.name));   // ▲ / ▼ suivent l'ordre des étages
   f.hidden = true;
   markDirty();
-  if (state.session.state === 'idle') { await showFloor(fl); setStatus(`Étage ajouté : ${fl.name}`); render(); }
+  if (state.session.state === 'idle') { await showFloor(fl); setStatus(t('status.floorAdded', { floor: fl.name })); render(); }
   else await switchFloor(fl);       // en pleine mesure : on enchaîne sur le nouvel étage
 }));
 
 $('btn-floor-rename').addEventListener('click', () => {
-  const name = prompt('Nouveau nom de l\'étage :', state.floor.name);
+  const name = prompt(t('prompt.rename'), state.floor.name);
   if (!name || !name.trim()) return;
   state.floor.name = name.trim();
   markDirty();
@@ -246,8 +244,7 @@ $('btn-floor-rename').addEventListener('click', () => {
 
 $('btn-floor-delete').addEventListener('click', () => runFileAction(async () => {
   const fl = state.floor, n = floorSampleCount(fl);
-  if (!confirm(`Supprimer l'étage « ${fl.name} »${n ? ` et ses ${nf(n)} mesures` : ''} ?\n\n`
-    + 'Il ne restera que dans un fichier projet déjà enregistré.')) return;
+  if (!confirm(t('confirm.deleteFloor', { floor: fl.name, n }))) return;
   lostMessage(state.session.stop());
   const next = removeFloor(state.project, fl.id);
   bitmaps.delete(fl.id);
@@ -255,7 +252,7 @@ $('btn-floor-delete').addEventListener('click', () => runFileAction(async () => 
   state.floor = null;           // pas de vue à mémoriser pour l'étage supprimé
   await showFloor(next);
   markDirty();
-  setStatus(`Étage supprimé : ${fl.name}`);
+  setStatus(t('status.floorDeleted', { floor: fl.name }));
   render();
 }));
 
@@ -264,7 +261,7 @@ function renderFloors() {
   $('sec-floors').hidden = !p;
   if (!p) return;
   const measuring = state.session && state.session.state !== 'idle';
-  const count = f => { const n = floorSampleCount(f); return n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure'; };
+  const count = f => t('floor.count', { n: floorSampleCount(f) });
   const sel = $('floor-select');
   // libellé court (la barre latérale est étroite) : nom, nombre de mesures entre parenthèses
   sel.innerHTML = p.floors.map(f => {
@@ -277,14 +274,14 @@ function renderFloors() {
   $('btn-floor-down').disabled = i <= 0;
   $('btn-floor-up').disabled = i >= p.floors.length - 1;
   const r = floorCompliance(fl, criterion());
-  $('floor-meta').textContent = [`Étage ${i + 1} sur ${p.floors.length}`, measuring ? '● en mesure' : '', count(fl),
+  $('floor-meta').textContent = [t('floor.position', { i: i + 1, n: p.floors.length }), measuring ? t('floor.measuring') : '', count(fl),
     r.pct === null ? '' : `ASTRID ${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)}`,
-    `${fl.segments.length} segment${fl.segments.length > 1 ? 's' : ''}`, fl.calibration ? 'échelle calibrée' : 'non calibré']
+    t('floor.segments', { n: fl.segments.length }), t(fl.calibration ? 'floor.calibrated' : 'floor.notCalibrated')]
     .filter(Boolean).join(' · ');
   $('btn-floor-delete').disabled = p.floors.length < 2;
 }
 
-const abandonOk = () => !state.dirty || confirm('Abandonner le projet en cours ? Les dernières modifications ne sont pas enregistrées.');
+const abandonOk = () => !state.dirty || confirm(t('confirm.abandon'));
 
 $('btn-new-project').addEventListener('click', () => {
   if (!abandonOk()) return;
@@ -297,7 +294,7 @@ $('btn-new-project').addEventListener('click', () => {
   $('form-new').reset();
   $('thresholds').innerHTML = '';
   view.setImage(null);
-  setStatus('Prêt');
+  setStatus(t('status.ready'));
   render();
 });
 
@@ -307,15 +304,19 @@ let recovered = null;
 async function offerRecovery() {
   try { recovered = await autosave.load(); } catch (e) { console.warn('Lecture de la copie de secours :', e); return; }
   if (!recovered || state.project) return;
+  renderRecovery();
+  $('sec-recover').hidden = false;
+}
+
+function renderRecovery() {
+  if (!recovered) return;
   const p = recovered.project, fl = p.floors.find(f => f.id === recovered.floorId) || p.floors[0];
   const n = fl.segments.reduce((a, s) => a + s.samples.length, 0) + (recovered.session?.pending?.length || 0);
-  const when = new Date(recovered.savedAt).toLocaleString('fr-BE', { dateStyle: 'short', timeStyle: 'short' });
+  const when = new Date(recovered.savedAt).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
   const running = recovered.session && recovered.session.state !== 'idle';
   $('recover-text').innerHTML = `<b>${esc(p.name)}</b> — ${esc(fl.name)}<br>`
-    + `<span class="muted small">Copie de secours du ${when} · ${nf(n)} mesure${n > 1 ? 's' : ''}`
-    + `${running ? ' · mesure en cours' : ''}</span>`
-    + (recovered.dirty ? '<br><span class="ko small">Contient des modifications non enregistrées dans un fichier.</span>' : '');
-  $('sec-recover').hidden = false;
+    + `<span class="muted small">${esc(t('recover.backup', { when, n }))}${running ? ` · ${t('recover.running')}` : ''}</span>`
+    + (recovered.dirty ? `<br><span class="ko small">${t('recover.dirty')}</span>` : '');
 }
 
 $('btn-recover').addEventListener('click', () => runFileAction(async () => {
@@ -326,7 +327,7 @@ $('btn-recover').addEventListener('click', () => runFileAction(async () => {
   state.dirHandle = rec.dirHandle || null;
   state.dirty = !!rec.dirty;
   const paused = state.session.state === 'paused';
-  setStatus(paused ? 'Mesure récupérée, en pause au dernier point cliqué' : 'Projet récupéré');
+  setStatus(t(paused ? 'status.recoveredPaused' : 'status.recovered'));
   render();
   await autosaveNow();
 }));
@@ -334,7 +335,7 @@ $('btn-recover').addEventListener('click', () => runFileAction(async () => {
 /** Avant de remplacer une copie de secours proposée et non enregistrée par un autre projet. */
 function discardRecoveryOk() {
   if (!recovered || $('sec-recover').hidden || !recovered.dirty) return true;
-  if (!confirm('Effacer définitivement la copie de secours proposée ? Les mesures non enregistrées dans un fichier seront perdues.')) return false;
+  if (!confirm(t('confirm.discardRecovery'))) return false;
   recovered = null;
   $('sec-recover').hidden = true;
   return true;
@@ -348,7 +349,7 @@ $('btn-recover-discard').addEventListener('click', () => {
 });
 
 // ---------- fichiers : enregistrer, ouvrir, exporter ----------
-const PROJECT_TYPE = { description: 'Projet TETRA Walk-Test', accept: { 'application/json': ['.json'] } };
+const projectType = () => ({ description: t('filetype.project'), accept: { 'application/json': ['.json'] } });
 
 /**
  * Enregistre un fichier : boîte « Enregistrer sous » si disponible (Edge/Chrome), sinon téléchargement.
@@ -388,12 +389,12 @@ async function exportFile(makeBlob, name, type) {
   const dir = await exportsDir();
   if (!dir) {
     const handle = await saveBlob(makeBlob, name, type);
-    notify(handle ? `Exporté : ${handle.name}` : `Téléchargé : ${name}`);
+    notify(handle ? t('notify.exported', { name: handle.name }) : t('notify.downloaded', { name }));
     return;
   }
-  notify(`Export de ${name}…`, 'busy', 0);
+  notify(t('notify.exporting', { name }), 'busy', 0);
   await writeHandle(await dir.getFileHandle(name, { create: true }), await makeBlob());
-  notify(`Exporté dans ${state.dirHandle.name}/${EXPORTS_DIR} : ${name}`);
+  notify(t('notify.exportedIn', { where: `${state.dirHandle.name}/${EXPORTS_DIR}`, name }));
 }
 
 function downloadBlob(blob, name) {
@@ -408,7 +409,7 @@ async function runFileAction(fn) {
   try { await fn(); }
   catch (e) {
     if (e.name === 'AbortError') { $('toast').hidden = true; return; }   // boîte annulée
-    notify(`Erreur : ${e.message}`, 'ko', 10000);
+    notify(t('notify.error', { msg: e.message }), 'ko', 10000);
   }
 }
 
@@ -421,10 +422,10 @@ async function saveProject(saveAs) {
     target = await state.dirHandle.getFileHandle(`${fileSafe(state.dirHandle.name)}.walktest.json`, { create: true });
   }
   const handle = await saveBlob(async () => new Blob([await serializeProject(project)], { type: 'application/json' }),
-    `${fileSafe(project.name)}.walktest.json`, PROJECT_TYPE, target);
+    `${fileSafe(project.name)}.walktest.json`, projectType(), target);
   state.fileHandle = handle;
   state.dirty = false;
-  notify(handle ? `Projet enregistré : ${handle.name}` : 'Projet téléchargé');
+  notify(handle ? t('notify.saved', { name: handle.name }) : t('notify.savedDownload'));
   renderSaveState();
   autosaveNow();
 }
@@ -433,7 +434,7 @@ async function openProject() {
   if (!abandonOk() || !discardRecoveryOk()) return;
   let file, handle = null;
   if (window.showOpenFilePicker) {
-    [handle] = await showOpenFilePicker({ types: [PROJECT_TYPE] });
+    [handle] = await showOpenFilePicker({ types: [projectType()] });
     file = await handle.getFile();
   } else {
     file = await new Promise(ok => {
@@ -447,7 +448,7 @@ async function openProject() {
   const project = await deserializeProject(await file.text());
   attachSession(null);
   await showProject(project, handle);
-  notify(`Projet ouvert : ${file.name}`);
+  notify(t('notify.opened', { name: file.name }));
   render();
   await restartAutosave();
 }
@@ -457,10 +458,10 @@ async function openProject() {
  * numéro d'étage), ou reprend le projet déjà enregistré dedans en y ajoutant les nouveaux plans.
  */
 async function openFolder() {
-  if (!window.showDirectoryPicker) throw new Error('Ouverture de dossier indisponible dans ce navigateur : utilisez Edge ou Chrome.');
+  if (!window.showDirectoryPicker) throw new Error(t('err.noFolderApi'));
   if (!abandonOk() || !discardRecoveryOk()) return;
   const dir = await showDirectoryPicker({ id: 'projects', mode: 'readwrite' });
-  setStatus(`Lecture du dossier « ${dir.name} »…`);
+  setStatus(t('status.readingFolder', { name: dir.name }));
   const found = await readProjectFolder(dir);
   const existing = !!found.projectFile;
   const project = existing
@@ -473,16 +474,17 @@ async function openFolder() {
     addFloor(project, { name: floorNameFromFile(file.name), image: { blob: file, name: file.name, type: file.type, width: bmp.width, height: bmp.height } });
     added.push(floorNameFromFile(file.name));
   }
-  if (!project.floors.length) throw new Error(`Aucun plan PNG ou JPG dans « ${dir.name}/${PLANS_DIR} ».`);
+  if (!project.floors.length) throw new Error(t('err.noPlans', { path: `${dir.name}/${PLANS_DIR}` }));
   project.floors.sort((a, b) => compareFloorNames(a.name, b.name));
   attachSession(null);
   await showProject(project, found.projectFile);
   state.dirHandle = dir;
   state.dirty = !existing || added.length > 0;
   const ignored = [...unreadable, ...found.ignored];
-  notify(`${existing ? 'Projet repris' : 'Projet créé'} : ${project.floors.length} étage${project.floors.length > 1 ? 's' : ''}`
-    + (existing && added.length ? `, nouveaux plans : ${added.join(', ')}` : '')
-    + (ignored.length ? ` — ignorés : ${ignored.join(', ')}` : ''), 'ok', 8000);
+  notify(t('notify.folder', {
+    existing, floors: project.floors.length,
+    added: existing && added.length ? added.join(', ') : '', ignored: ignored.join(', '),
+  }), 'ok', 8000);
   render();
   await restartAutosave();
 }
@@ -507,7 +509,7 @@ $('btn-export-csv').addEventListener('click', () => runFileAction(async () => {
 $('btn-export-png').addEventListener('click', () => runFileAction(async () => {
   const fl = state.floor, project = state.project, bmp = state.bitmap;
   await exportFile(() => floorPng(project, fl, bmp), `${fileSafe(`${project.name} - ${fl.name}`)}.png`,
-    { description: 'Image PNG', accept: { 'image/png': ['.png'] } });
+    { description: t('filetype.png'), accept: { 'image/png': ['.png'] } });
 }));
 
 // tous les étages d'un coup : PNG + CSV de chaque étage et un CSV commun,
@@ -519,27 +521,27 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
   const files = project.floors.flatMap(fl => [
     { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
     { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl, project.criterion)], { type: 'text/csv' }) },
-  ]).concat({ name: `${base}tous les étages.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
+  ]).concat({ name: `${base}${t('file.allFloors')}.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
   for (const [i, f] of files.entries()) {
-    notify(`Export ${i + 1}/${files.length}…`, 'busy', 0);
+    notify(t('notify.exportProgress', { i: i + 1, n: files.length }), 'busy', 0);
     const blob = await f.make(), name = fileSafe(f.name);
     if (!dir) { downloadBlob(blob, name); continue; }
     await writeHandle(await dir.getFileHandle(name, { create: true }), blob);
   }
   const where = dir ? (state.dirHandle && dir.name === EXPORTS_DIR ? `${state.dirHandle.name}/${EXPORTS_DIR}` : dir.name) : '';
-  notify(`${files.length} fichiers exportés${where ? ` dans « ${where} »` : ' (téléchargements)'}`, 'ok', 7000);
+  notify(t('notify.exportedAll', { n: files.length, where }), 'ok', 7000);
 }));
 
 function renderSaveState() {
   const el = $('save-state');
   if (!state.project) return;
   el.textContent = state.dirty
-    ? `● Modifications non enregistrées${state.dirHandle && !state.fileHandle ? ' (Ctrl+S les enregistre dans le dossier)' : ''}`
-    : state.fileHandle ? `Enregistré dans ${state.fileHandle.name}` : 'Enregistré';
+    ? t('save.dirty') + (state.dirHandle && !state.fileHandle ? t('save.dirtyFolder') : '')
+    : state.fileHandle ? t('save.savedIn', { name: state.fileHandle.name }) : t('save.saved');
   el.classList.toggle('ko', state.dirty);
   if (state.autosavedAt) {
-    const t = new Date(state.autosavedAt).toLocaleTimeString('fr-BE');
-    el.append(Object.assign(document.createElement('span'), { className: 'muted', textContent: ` · copie de secours ${t}` }));
+    const time = new Date(state.autosavedAt).toLocaleTimeString(locale());
+    el.append(Object.assign(document.createElement('span'), { className: 'muted', textContent: t('save.backup', { time }) }));
   }
 }
 
@@ -558,12 +560,12 @@ stage.addEventListener('drop', e => {
     f.plan.files = e.dataTransfer.files;
     f.hidden = false;
     f.floor.focus();
-    setStatus(`Plan sélectionné : ${e.dataTransfer.files[0].name} — nommez le nouvel étage`);
+    setStatus(t('status.planSelectedFloor', { name: e.dataTransfer.files[0].name }));
     return;
   }
   const form = $('form-new');
   form.plan.files = e.dataTransfer.files;
-  setStatus(`Plan sélectionné : ${e.dataTransfer.files[0].name}`);
+  setStatus(t('status.planSelected', { name: e.dataTransfer.files[0].name }));
   if (form.checkValidity()) form.requestSubmit(); else form.name.focus();
 });
 
@@ -600,7 +602,7 @@ document.querySelectorAll('.calib-cancel').forEach(b => b.addEventListener('clic
 $('btn-calib-clear').addEventListener('click', () => {
   clearCalibration(state.floor);
   markDirty();
-  setStatus('Échelle supprimée');
+  setStatus(t('status.scaleRemoved'));
   render();
 });
 
@@ -614,13 +616,13 @@ view.addEventListener('planclick', e => {
   if (!img || state.mode === 'distance') return;
   if (state.mode === 'idle') {
     if (!ses || ses.state === 'idle') return;
-    if (ses.state === 'paused') { setStatus('En pause : cliquez « Reprendre »'); return; }
-    if (p.x < 0 || p.y < 0 || p.x > img.width || p.y > img.height) { setStatus('Point hors du plan'); return; }
-    if (!radioOkOrConfirm('Placer le point')) return;
+    if (ses.state === 'paused') { setStatus(t('status.pausedClickResume')); return; }
+    if (p.x < 0 || p.y < 0 || p.x > img.width || p.y > img.height) { setStatus(t('status.outside')); return; }
+    if (!radioOkOrConfirm(t('action.placePoint'))) return;
     ses.click(p);
     return;
   }
-  if (p.x < 0 || p.y < 0 || p.x > img.width || p.y > img.height) { setStatus('Point hors du plan'); return; }
+  if (p.x < 0 || p.y < 0 || p.x > img.width || p.y > img.height) { setStatus(t('status.outside')); return; }
   if (state.mode === 'pick1') {
     Object.assign(state, { p1: p, mode: 'pick2' });
   } else if (state.mode === 'pick2') {
@@ -642,7 +644,7 @@ $('form-dist').addEventListener('submit', e => {
     setCalibration(state.floor, state.p1, state.p2, meters);
     markDirty();
     Object.assign(state, { mode: 'idle', p1: null, p2: null });
-    setStatus('Échelle enregistrée');
+    setStatus(t('status.scaleSaved'));
     render();
   } catch (ex) { setStatus(ex.message); }
 });
@@ -679,7 +681,7 @@ function drawCurrentLeg(ctx, t, ses) {
     ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = '#0b57d0';
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     ctx.restore();
-    if (ses.pending.length) drawLabel(ctx, `${ses.pending.length} mesure${ses.pending.length > 1 ? 's' : ''} en attente`, b.x, b.y - 18);
+    if (ses.pending.length) drawLabel(ctx, t('map.pending', { n: ses.pending.length }), b.x, b.y - 18);
   }
   ctx.beginPath(); ctx.arc(a.x, a.y, 7, 0, 2 * Math.PI);
   ctx.fillStyle = ses.state === 'paused' ? '#888' : '#0b57d0'; ctx.fill();
@@ -708,11 +710,7 @@ function drawOverlay(ctx, t) {
 }
 
 // ---------- panneaux ----------
-const HELP = {
-  pick1: 'Cliquez sur le 1er point d\'une distance connue (mur, trame de poteaux…).',
-  pick2: 'Cliquez sur le 2e point.',
-  distance: 'Saisissez la distance réelle entre les 2 points.',
-};
+const CALIB_HELP = { pick1: 'calib.pick1', pick2: 'calib.pick2', distance: 'calib.distance' };
 
 function render() {
   const p = state.project, fl = state.floor, calibrating = state.mode !== 'idle';
@@ -738,16 +736,16 @@ function render() {
 
     const cal = fl.calibration;
     $('scale-status').innerHTML = cal
-      ? `1 m = ${nf(1 / cal.mPerPx, 1)} px<br><span class="muted small">Plan ≈ ${nf(fl.image.width * cal.mPerPx)} × ${nf(fl.image.height * cal.mPerPx)} m</span>`
-      : '<span class="muted">Non calibrée (optionnel).</span>';
+      ? `1 m = ${nf(1 / cal.mPerPx, 1)} px<br><span class="muted small">${t('scale.size', { w: nf(fl.image.width * cal.mPerPx), h: nf(fl.image.height * cal.mPerPx) })}</span>`
+      : `<span class="muted">${t('scale.none')}</span>`;
     $('calib-help').hidden = !calibrating;
-    $('calib-help').textContent = HELP[state.mode] || '';
+    $('calib-help').textContent = CALIB_HELP[state.mode] ? t(CALIB_HELP[state.mode]) : '';
     $('form-dist').hidden = state.mode !== 'distance';
     if (state.mode === 'distance') $('form-dist').meters.value = '';
     $('btn-calib').hidden = calibrating;
     $('btn-calib').disabled = !!state.session && state.session.state !== 'idle';
-    $('btn-calib').title = $('btn-calib').disabled ? 'Terminez la mesure avant de recalibrer' : '';
-    $('btn-calib').textContent = cal ? 'Recalibrer…' : 'Calibrer…';
+    $('btn-calib').title = $('btn-calib').disabled ? t('title.calibDisabled') : '';
+    $('btn-calib').textContent = t(cal ? 'btn.recalibrate' : 'btn.calibrate');
     $('btn-calib-clear').hidden = calibrating || !cal;
     document.querySelector('#calib-actions .calib-cancel').hidden = !(state.mode === 'pick1' || state.mode === 'pick2');
   }
@@ -766,24 +764,24 @@ function attachSession(ses) {
 }
 
 function lostMessage(n) {
-  if (n) setStatus(`${n} mesure${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} après le dernier clic ignorée${n > 1 ? 's' : ''}`);
+  if (n) setStatus(t('status.lost', { n }));
 }
 
 // Sans radio, aucune mesure n'arrive : un tronçon parcouru ainsi reste un simple trait sans niveaux.
 // On ne l'interdit pas (corrections au bureau, après coup), mais on prévient à chaque fois.
 function radioOkOrConfirm(action) {
   return radio.state === 'streaming'
-    || confirm(`La radio n'est pas connectée : aucune mesure ne sera enregistrée.\n\n${action} quand même ?`);
+    || confirm(t('confirm.noRadio', { action }));
 }
 
 function toggleMeasurePause() {
   const ses = state.session;
   if (ses.state === 'walking') ses.pause();
-  else if (ses.state === 'paused' && radioOkOrConfirm('Reprendre la mesure')) ses.resume();
+  else if (ses.state === 'paused' && radioOkOrConfirm(t('action.resume'))) ses.resume();
 }
 
 $('btn-start').addEventListener('click', () => {
-  if (!radioOkOrConfirm('Démarrer')) return;
+  if (!radioOkOrConfirm(t('action.start'))) return;
   if (radio.state === 'streaming') state.floor.radio = { ...radio.info };   // radio utilisée pour cet étage
   state.session.start();
   render();
@@ -792,8 +790,7 @@ $('btn-pause').addEventListener('click', toggleMeasurePause);
 // au-delà de quelques secondes de mesures non placées, on demande avant de les perdre
 function confirmLoss() {
   const n = state.session.pending.length;
-  return n < 3 || confirm(`${n} mesures reçues depuis le dernier clic seront perdues.\n\n`
-    + 'Annulez puis cliquez d\'abord votre position actuelle sur le plan pour les garder.\n\nContinuer quand même ?');
+  return n < 3 || confirm(t('confirm.loss', { n }));
 }
 $('btn-endseg').addEventListener('click', () => { if (confirmLoss()) lostMessage(state.session.endSegment()); });
 $('btn-undo').addEventListener('click', () => state.session.undo());
@@ -803,18 +800,13 @@ $('btn-stop').addEventListener('click', () => {
   render();
 });
 
-const MEASURE_HELP = {
-  ready: 'Cliquez sur le plan à votre position de départ.',
-  walking: 'Marchez et cliquez votre position à chaque virage ou repère. Avant « Fin de segment » ou « Terminer », cliquez le dernier point.',
-  paused: 'En pause : les mesures reçues ne sont pas enregistrées.',
-};
+const MEASURE_HELP = { ready: 'help.ready', walking: 'help.walking', paused: 'help.paused' };
 
 // un étage qu'on n'a pas pu finir se complète plus tard : les nouveaux passages s'ajoutent
 function idleHelp(fl, streaming) {
   const n = floorSampleCount(fl);
-  if (!streaming) return 'Connectez la radio pour pouvoir mesurer.';
-  return n ? `${fl.name} a déjà ${nf(n)} mesures : « Continuer les mesures » ajoute un nouveau passage, sans rien effacer.`
-    : 'Cliquez « Démarrer », puis votre position de départ sur le plan.';
+  if (!streaming) return t('help.noRadio');
+  return n ? t('help.continue', { floor: fl.name, n }) : t('help.start');
 }
 
 function renderMeasure() {
@@ -824,15 +816,14 @@ function renderMeasure() {
   const st = ses.state, streaming = radio.state === 'streaming';
   const help = $('measure-help');
   help.textContent = st !== 'idle' && !streaming
-    ? (radioStuck ? STUCK_MSG + ' Puis « Reprendre » à votre position.'
-      : reconnecting ? 'Radio déconnectée : reconnexion automatique en cours… Ne reprenez qu\'une fois la radio « en mesure ».'
-      : 'Radio déconnectée : reconnectez-la, puis « Reprendre » à votre position.')
-    : MEASURE_HELP[st] || idleHelp(fl, streaming);
+    ? (radioStuck ? `${t('radio.stuck')} ${t('help.stuck')}`
+      : t(reconnecting ? 'help.reconnecting' : 'help.disconnected'))
+    : MEASURE_HELP[st] ? t(MEASURE_HELP[st]) : idleHelp(fl, streaming);
   help.classList.toggle('warn', st !== 'idle' && !streaming);
   $('btn-start').hidden = st !== 'idle';
-  $('btn-start').textContent = floorSampleCount(fl) ? 'Continuer les mesures' : 'Démarrer';
+  $('btn-start').textContent = t(floorSampleCount(fl) ? 'btn.continue' : 'btn.start');
   $('btn-pause').hidden = st !== 'walking' && st !== 'paused';
-  $('btn-pause').textContent = st === 'paused' ? 'Reprendre' : 'Pause';
+  $('btn-pause').textContent = t(st === 'paused' ? 'btn.resume' : 'btn.pause');
   $('btn-pause').classList.toggle('primary', st === 'paused');
   $('btn-endseg').hidden = st !== 'walking' && st !== 'paused';
   $('btn-undo').hidden = st === 'idle';
@@ -840,24 +831,24 @@ function renderMeasure() {
   $('btn-stop').hidden = st === 'idle';
 
   const s = floorStats(fl), cal = fl.calibration;
-  const length = cal ? `${nf(s.length * cal.mPerPx, 1)} m` : `${nf(s.length)} px (non calibré)`;
+  const length = cal ? `${nf(s.length * cal.mPerPx, 1)} m` : `${nf(s.length)} ${t('stats.notCalibrated')}`;
   const c = criterion(), r = floorCompliance(fl, c);
-  const astrid = r.pct === null ? '<dd class="muted">pas encore de mesure</dd>'
+  const astrid = r.pct === null ? `<dd class="muted">${t('stats.noMeasure')}</dd>`
     : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} &gt; ${c.rssi} dBm `
-      + `<span class="muted">(objectif ${c.percent} % ; ${fmtPct(r.pctSamples)} des points)</span></dd>`;
+      + `<span class="muted">${t('stats.goal', { goal: c.percent, points: fmtPct(r.pctSamples) })}</span></dd>`;
   $('measure-stats').innerHTML =
-    `<dt>Points de mesure</dt><dd>${nf(s.samples)}${ses.pending.length ? ` <span class="muted">+ ${ses.pending.length} en attente</span>` : ''}</dd>` +
-    `<dt>Segments</dt><dd>${s.segments}</dd><dt>Parcours</dt><dd>${length}</dd>` +
-    `<dt>ASTRID</dt>${astrid}`;
+    `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
+    `<dt>${t('stats.segments')}</dt><dd>${s.segments}</dd><dt>${t('stats.route')}</dt><dd>${length}</dd>` +
+    `<dt>${t('stats.astrid')}</dt>${astrid}`;
 }
 
 // ---------- seuils RSSI ----------
 function renderThresholds() {
   const th = thresholds();
-  $('thresholds').innerHTML = th.map((t, i) =>
-    `<span class="swatch" style="background:${t.color}"></span><span>≥</span>` +
-    `<input type="number" step="1" max="0" min="-140" data-i="${i}" value="${t.min}" aria-label="Seuil ${i + 1} (dBm)">`
-  ).join('') + `<span class="swatch" style="background:#000"></span><span>&lt;</span><span class="muted">${th[th.length - 1].min} : « No »</span>`;
+  $('thresholds').innerHTML = th.map((level, i) =>
+    `<span class="swatch" style="background:${level.color}"></span><span>≥</span>` +
+    `<input type="number" step="1" max="0" min="-140" data-i="${i}" value="${level.min}" aria-label="${esc(t('aria.threshold', { i: i + 1 }))}">`
+  ).join('') + `<span class="swatch" style="background:#000"></span><span>&lt;</span><span class="muted">${th[th.length - 1].min} : No</span>`;
   $('crit-rssi').value = criterion().rssi;
   $('crit-pct').value = criterion().percent;
 }
@@ -884,7 +875,7 @@ $('thresholds').addEventListener('change', e => {
   const mins = [...$('thresholds').querySelectorAll('input')].map(i => i.valueAsNumber);
   const ok = mins.every((m, i) => Number.isFinite(m) && (i === 0 || m < mins[i - 1]));
   $('thresholds-error').hidden = ok;
-  $('thresholds-error').textContent = ok ? '' : 'Les seuils doivent être des nombres strictement décroissants.';
+  $('thresholds-error').textContent = ok ? '' : t('err.thresholds');
   if (!ok) return;
   state.project.thresholds = state.project.thresholds.map((t, i) => ({ ...t, min: mins[i] }));
   markDirty();
@@ -905,7 +896,6 @@ $('btn-thresholds-reset').addEventListener('click', () => {
 const radio = new Radio();
 const STALE_MS = 5000;   // au-delà sans mesure : alerte
 const DEMO = new URLSearchParams(location.search).has('demo');   // radio simulée
-if (DEMO) $('btn-connect').textContent = 'Connecter la radio simulée';
 
 function showRadioError(msg) {
   $('radio-error').textContent = msg || '';
@@ -928,7 +918,7 @@ $('btn-connect').addEventListener('click', async () => {
     return;
   }
   const vid = port.getInfo().usbVendorId;
-  if (vid !== undefined && vid !== RADIO_VID) showRadioError('Ce port ne semble pas être une radio Motorola ; tentative quand même…');
+  if (vid !== undefined && vid !== RADIO_VID) showRadioError(t('radio.notMotorola'));
   try {
     await radio.connect(port);
     showRadioError('');
@@ -945,7 +935,6 @@ $('btn-disconnect').addEventListener('click', () => { reconnectWanted = false; r
 // son redémarrage (docs/PROTOCOL.md). Dès qu'on le constate, on demande de redémarrer la radio et on
 // continue d'essayer : elle se reconnecte toute seule une fois rallumée. La mesure reste en pause.
 const RECONNECT_MS = 5 * 60 * 1000, RECONNECT_GAP_MS = 3000;   // relancé à chaque rebranchement
-const STUCK_MSG = 'La radio ne répond plus : éteignez-la puis rallumez-la, câble branché. La reconnexion se fera toute seule.';
 let reconnectWanted = false, reconnecting = false, radioStuck = false;
 
 async function autoReconnect() {
@@ -956,7 +945,7 @@ async function autoReconnect() {
   try {
     for (let i = 1; Date.now() < deadline; i++) {
       if (!reconnectWanted || radio.state !== 'disconnected') return;
-      setStatus(radioStuck ? `Radio bloquée : redémarrez-la (essai ${i})…` : `Radio débranchée : reconnexion automatique (essai ${i})…`);
+      setStatus(t(radioStuck ? 'status.stuckTry' : 'status.reconnectTry', { i }));
       for (const port of await navigator.serial.getPorts()) {
         if (!reconnectWanted || radio.state !== 'disconnected') return;
         try {
@@ -964,21 +953,20 @@ async function autoReconnect() {
           reconnectWanted = false;
           radioStuck = false;
           showRadioError('');
-          setStatus(state.session && state.session.state === 'paused'
-            ? 'Radio reconnectée : cliquez « Reprendre » une fois à votre position' : 'Radio reconnectée');
+          setStatus(t(state.session && state.session.state === 'paused' ? 'status.reconnectedResume' : 'status.reconnected'));
           return;
         } catch (e) {
           // port ouvert mais muet : radio bloquée (ou Port 2, qui ne compte pas si Port 1 répond ensuite)
           if (e.code === 'silent' && !radioStuck) {
             radioStuck = true;
-            showRadioError(STUCK_MSG);
+            showRadioError(t('radio.stuck'));
             renderMeasure();
           }
         }
       }
       await new Promise(r => setTimeout(r, RECONNECT_GAP_MS));
     }
-    setStatus('Reconnexion automatique abandonnée : cliquez « Connecter la radio… »');
+    setStatus(t('status.reconnectGaveUp'));
   } finally {
     reconnecting = false;
     renderMeasure();
@@ -987,12 +975,23 @@ async function autoReconnect() {
 
 if (navigator.serial) navigator.serial.addEventListener('connect', () => autoReconnect());
 
+/** Textes de l'état radio (indicateur, section Radio) ; rappelé au changement de langue. */
+function renderRadio() {
+  const s = radio.state, pill = $('radio-pill');
+  pill.className = `pill ${s}`;
+  pill.textContent = t(`pill.${s}`);
+  $('radio-state').textContent = t(`radio.state.${s}`);
+  $('btn-connect').textContent = t(DEMO ? 'btn.connectDemo' : 'btn.connect');
+  if (radio.info && !$('radio-info').hidden) renderIdentity(radio.info);
+}
+
+function renderIdentity(info) {
+  $('radio-info').innerHTML = INFO.filter(i => info[i.key]).map(i => `<dt>${t(`info.${i.key}`)}</dt><dd>${esc(info[i.key])}</dd>`).join('');
+}
+
 radio.addEventListener('state', e => {
   const { state: s, message } = e.detail;
-  const pill = $('radio-pill');
-  pill.className = `pill ${s}`;
-  pill.textContent = { disconnected: 'Radio déconnectée', connecting: 'Connexion…', streaming: 'Radio en mesure' }[s];
-  $('radio-state').textContent = { disconnected: 'Non connectée.', connecting: 'Connexion et lecture de l\'identité…', streaming: 'Connectée, flux de mesure actif.' }[s];
+  renderRadio();
   $('btn-connect').hidden = s !== 'disconnected';
   $('btn-connect').disabled = s === 'connecting';
   $('btn-disconnect').hidden = s === 'disconnected';
@@ -1001,19 +1000,18 @@ radio.addEventListener('state', e => {
   if (message) showRadioError(message);
   if (s === 'streaming') resetLive();
   // radio perdue en pleine mesure : pause automatique (rien n'est perdu de ce qui est placé)
-  if (s === 'disconnected' && state.session && state.session.pause()) setStatus('Radio déconnectée : mesure en pause');
+  if (s === 'disconnected' && state.session && state.session.pause()) setStatus(t('status.radioPaused'));
   renderMeasure();
 });
 
 radio.addEventListener('identity', e => {
-  const info = e.detail;
-  $('radio-info').innerHTML = INFO.filter(i => info[i.key]).map(i => `<dt>${i.label}</dt><dd>${esc(info[i.key])}</dd>`).join('');
+  renderIdentity(e.detail);
   $('radio-info').hidden = false;
 });
 
 radio.addEventListener('lost', () => {
   reconnectWanted = !DEMO;
-  setStatus(DEMO ? 'Radio débranchée' : 'Radio débranchée : rebranchez-la, la reconnexion est automatique');
+  setStatus(t(DEMO ? 'status.unplugged' : 'status.unpluggedAuto'));
   autoReconnect();
 });
 
@@ -1029,7 +1027,7 @@ function resetLive() {
   b.style.background = ''; b.style.color = '';
   b.querySelector('b').textContent = '—';
   for (const id of ['live-la', 'live-ch', 'live-c1']) $(id).textContent = '—';
-  $('live-neigh').innerHTML = '<tr><td colspan="4" class="muted">En attente des mesures…</td></tr>';
+  $('live-neigh').innerHTML = `<tr><td colspan="4" class="muted">${t('live.waiting')}</td></tr>`;
   $('live-astrid').textContent = '';
   $('live-age').textContent = '';
 }
@@ -1044,7 +1042,7 @@ radio.addEventListener('measure', e => {
   $('live-c1').textContent = s.c1 === '' ? '—' : s.c1;
   // verdict ASTRID de la mesure en cours
   const c = criterion(), ok = sampleOk(s.rssi, c), v = $('live-astrid');
-  v.textContent = ok ? `✔ Conforme ASTRID (> ${c.rssi} dBm)` : `✘ Insuffisant pour ASTRID (≤ ${c.rssi} dBm)`;
+  v.textContent = t(ok ? 'live.ok' : 'live.ko', { rssi: c.rssi });
   v.className = `verdict ${ok ? 'ok' : 'ko'}`;
   // voisines identifiées par LA (la radio les reclasse en permanence), triées par RSSI
   const neigh = [1, 2, 3, 4].filter(n => s[`n${n}_la`] !== '')
@@ -1052,7 +1050,7 @@ radio.addEventListener('measure', e => {
     .sort((a, b) => (b.rssi === '' ? -999 : b.rssi) - (a.rssi === '' ? -999 : a.rssi));
   $('live-neigh').innerHTML = neigh.length
     ? neigh.map(n => `<tr><td><span class="dot" style="background:${colorOf(n.rssi)}"></span>${n.la}</td><td>${n.ch}</td><td>${n.rssi}</td><td>${n.cx}</td></tr>`).join('')
-    : '<tr><td colspan="4" class="muted">Aucune voisine.</td></tr>';
+    : `<tr><td colspan="4" class="muted">${t('live.noNeighbour')}</td></tr>`;
   updateAge();
 });
 
@@ -1060,8 +1058,7 @@ function updateAge() {
   if (radio.state !== 'streaming') return;
   const last = radio.lastMeasureAt, age = last ? (Date.now() - last) / 1000 : null;
   const stale = age === null ? false : age * 1000 > STALE_MS;
-  $('live-age').textContent = age === null ? 'En attente de la première mesure…'
-    : stale ? `⚠ Aucune mesure depuis ${nf(age)} s` : `Dernière mesure il y a ${nf(age)} s`;
+  $('live-age').textContent = age === null ? t('age.first') : t(stale ? 'age.stale' : 'age.last', { s: nf(age) });
   $('live-age').classList.toggle('ko', stale);
   $('radio-pill').classList.toggle('stale', stale);
 }
@@ -1074,15 +1071,43 @@ window.addEventListener('beforeunload', e => {
 });
 
 // ---------- environnement ----------
-if (!('serial' in navigator) && !DEMO) {
-  $('serial-support').innerHTML = '<span class="ko">✘ API Web Serial indisponible : utiliser Edge ou Chrome (https ou localhost).</span>';
+function renderSerialSupport() {
+  if ('serial' in navigator || DEMO) return;
+  $('serial-support').innerHTML = `<span class="ko">${t('serial.unsupported')}</span>`;
   $('btn-connect').disabled = true;
 }
+
+// ---------- langue ----------
+// Change la langue sans recharger : textes fixes (data-i18n), puis tous les panneaux dynamiques.
+function applyLanguage() {
+  applyDom();
+  for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === getLang()));
+  renderRadio();
+  renderSerialSupport();
+  renderRecovery();
+  if (state.project) renderThresholds();
+  if (radio.state === 'streaming' && !radio.lastMeasureAt) resetLive();
+  updateAge();
+  render();
+}
+document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+  const wasReady = $('status').textContent === t('status.ready');
+  setLang(b.dataset.lang);
+  if (wasReady) setStatus(t('status.ready'));
+  applyLanguage();
+}));
+// le nom d'étage par défaut suit la langue tant qu'on ne l'a pas modifié
+$('form-new').floor.addEventListener('input', e => { e.target.dataset.touched = '1'; });
+$('form-new').addEventListener('reset', () => setTimeout(() => {
+  delete $('form-new').floor.dataset.touched;
+  applyDom($('form-new'));
+}));
 
 // Service worker : appli disponible hors ligne sur site
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker non enregistré :', e));
 }
 
-render();
+setStatus(t('status.ready'));
+applyLanguage();
 offerRecovery();

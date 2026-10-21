@@ -7,7 +7,7 @@
 // La surface est approchée par la longueur parcourue : chaque mesure compte pour la moitié du trajet
 // vers ses voisines dans son segment (comme sur la trace), si bien que rester sur place ne pèse pas.
 import { dist } from './geometry.js';
-import { nf } from './render.js';
+import { nf, t } from './i18n.js';
 
 export const DEFAULT_CRITERION = { rssi: -88, percent: 95 };
 
@@ -41,5 +41,5 @@ export const fmtPct = p => `${nf(Math.floor(p * 10) / 10, 1)} %`;
 export function complianceText(floor, c = DEFAULT_CRITERION) {
   const r = floorCompliance(floor, c);
   if (r.pct === null) return null;
-  return `ASTRID : ${fmtPct(r.pct)} > ${c.rssi} dBm — ${r.ok ? 'conforme' : 'NON conforme'} (objectif ${c.percent} %)`;
+  return t('compliance.text', { pct: fmtPct(r.pct), rssi: c.rssi, ok: r.ok, goal: c.percent });
 }

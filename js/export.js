@@ -1,7 +1,8 @@
 // export.js — exports par étage : CSV des mesures et PNG du plan avec la trace.
 import { ViewTransform } from './geometry.js';
 import { NEIGH } from './protocol.js';
-import { FONT, nf, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
+import { FONT, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
+import { t } from './i18n.js';
 import { DEFAULT_CRITERION, sampleOk, complianceText } from './criterion.js';
 
 // Colonnes : mêmes noms que tools/mtp_trace.py, plus date, segment et position en mètres.
@@ -56,9 +57,9 @@ export function caption(project, floor) {
   const when = samples.length
     ? `${localDate(new Date(samples[0].time))} ${localTime(new Date(samples[0].time)).slice(0, 5)}–${localTime(new Date(samples[samples.length - 1].time)).slice(0, 5)}`
     : '';
-  const radio = floor.radio && floor.radio.issi ? `radio ISSI ${floor.radio.issi}` : '';
+  const radio = floor.radio && floor.radio.issi ? t('caption.radio', { issi: floor.radio.issi }) : '';
   const astrid = complianceText(floor, project.criterion || DEFAULT_CRITERION);
-  return [parts, when, `${nf(samples.length)} mesures`, astrid, radio].filter(Boolean).join(' · ');
+  return [parts, when, t('caption.measures', { n: samples.length }), astrid, radio].filter(Boolean).join(' · ');
 }
 
 /** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau. */

@@ -5,7 +5,8 @@
 Jean Pauwels (JEANVAL TECH SRL) fait des mesures de couverture indoor ASTRID (réseau TETRA
 belge des services de secours) pour Connext NV, avec un terminal **Motorola MTP6550**.
 SCOUT, le logiciel Motorola utilisé jusqu'ici, n'est plus maintenu. Ce projet le remplace.
-Projet **open source**. Documentation et interface en **français**.
+Projet **open source**. Documentation en **français** ; interface en **français, néerlandais et
+anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 
 ## Ce qui est déjà acquis
 
