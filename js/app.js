@@ -9,6 +9,7 @@ import { rssiColor, textOn, DEFAULT_THRESHOLDS } from './thresholds.js';
 import { Session, floorStats } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
+import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
 import { nf, fmtMeters, drawLabel, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
 
 const $ = id => document.getElementById(id);
@@ -22,6 +23,7 @@ const state = {
   session: null,    // mesure par waypoints sur l'étage affiché
   bitmap: null,     // plan décodé de l'étage affiché
   fileHandle: null, // fichier projet ouvert / enregistré (API File System Access)
+  dirHandle: null,  // dossier projet ouvert (plans/, exports/, fichier projet)
   dirty: false,     // modifications non enregistrées dans le fichier projet
   autosavedAt: 0,   // dernière copie de secours dans le navigateur
 };
@@ -47,7 +49,7 @@ async function autosaveNow() {
   try {
     await autosave.save(state.project, {
       session: state.session ? state.session.snapshot() : null,
-      dirty: state.dirty, fileHandle: state.fileHandle, floorId: state.floor.id,
+      dirty: state.dirty, fileHandle: state.fileHandle, dirHandle: state.dirHandle, floorId: state.floor.id,
     });
     state.autosavedAt = Date.now();
     renderSaveState();
@@ -122,6 +124,7 @@ async function showProject(project, handle, floorId = null, session = null) {
   state.project = project;
   state.floor = null;
   state.fileHandle = handle;
+  state.dirHandle = null;
   state.dirty = false;
   bitmaps.clear();
   views.clear();
@@ -231,7 +234,9 @@ function renderFloors() {
   if (!p) return;
   $('floor-list').innerHTML = p.floors.map(f => {
     const n = floorSampleCount(f);
-    const meta = [n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure', f.calibration ? 'échelle' : ''].filter(Boolean).join(' · ');
+    const measuring = f === state.floor && state.session && state.session.state !== 'idle';
+    const meta = [measuring ? '● en mesure' : '', n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure', f.calibration ? 'échelle' : '']
+      .filter(Boolean).join(' · ');
     return `<li><button class="floor-item" data-floor="${f.id}" aria-current="${f === state.floor}">`
       + `<span>${esc(f.name)}</span><span class="meta">${meta}</span></button></li>`;
   }).join('');
@@ -243,7 +248,7 @@ const abandonOk = () => !state.dirty || confirm('Abandonner le projet en cours ?
 $('btn-new-project').addEventListener('click', () => {
   if (!abandonOk()) return;
   attachSession(null);
-  Object.assign(state, { project: null, floor: null, bitmap: null, fileHandle: null, dirty: false, mode: 'idle', p1: null, p2: null });
+  Object.assign(state, { project: null, floor: null, bitmap: null, fileHandle: null, dirHandle: null, dirty: false, mode: 'idle', p1: null, p2: null });
   bitmaps.clear();
   views.clear();
   $('form-floor').hidden = true;
@@ -277,6 +282,7 @@ $('btn-recover').addEventListener('click', () => runFileAction(async () => {
   const p = rec.project;
   const fl = p.floors.find(f => f.id === rec.floorId) || p.floors[0];   // l'étage où l'on mesurait
   await showProject(p, rec.fileHandle || null, fl.id, Session.restore(fl, rec.session));
+  state.dirHandle = rec.dirHandle || null;
   state.dirty = !!rec.dirty;
   const paused = state.session.state === 'paused';
   setStatus(paused ? 'Mesure récupérée, en pause au dernier point cliqué' : 'Projet récupéré');
@@ -309,18 +315,43 @@ const PROJECT_TYPE = { description: 'Projet TETRA Walk-Test', accept: { 'applica
  */
 async function saveBlob(makeBlob, name, type, handle = null) {
   if (window.showSaveFilePicker) {
-    // fichier repris d'une session précédente : Edge redemande l'autorisation d'écrire
-    if (handle && handle.queryPermission && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted'
-        && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') handle = null;
-    handle ??= await showSaveFilePicker({ suggestedName: name, types: [type] });
-    const blob = await makeBlob();
-    const w = await handle.createWritable();
-    await w.write(blob);
-    await w.close();
+    if (handle && !await ensureWrite(handle)) handle = null;
+    handle ??= await showSaveFilePicker({ suggestedName: name, types: [type], ...(state.dirHandle ? { startIn: state.dirHandle } : {}) });
+    await writeHandle(handle, await makeBlob());
     return handle;
   }
   downloadBlob(await makeBlob(), name);
   return null;
+}
+
+/** Fichier ou dossier repris d'une session précédente : Edge redemande l'autorisation d'écrire. */
+async function ensureWrite(handle) {
+  if (!handle.queryPermission || await handle.queryPermission({ mode: 'readwrite' }) === 'granted') return true;
+  return await handle.requestPermission({ mode: 'readwrite' }) === 'granted';
+}
+
+async function writeHandle(handle, blob) {
+  const w = await handle.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+/** Sous-dossier « exports » du dossier projet ouvert, ou null s'il n'y en a pas. */
+async function exportsDir() {
+  if (!state.dirHandle || !await ensureWrite(state.dirHandle)) return null;
+  return state.dirHandle.getDirectoryHandle(EXPORTS_DIR, { create: true });
+}
+
+/** Export d'un fichier : dans « exports » du dossier projet, sinon boîte « Enregistrer sous ». */
+async function exportFile(makeBlob, name, type) {
+  const dir = await exportsDir();
+  if (!dir) {
+    await saveBlob(makeBlob, name, type);
+    setStatus(`${name} exporté`);
+    return;
+  }
+  await writeHandle(await dir.getFileHandle(name, { create: true }), await makeBlob());
+  setStatus(`${name} exporté dans ${state.dirHandle.name}/${EXPORTS_DIR}`);
 }
 
 function downloadBlob(blob, name) {
@@ -339,8 +370,13 @@ async function runFileAction(fn) {
 async function saveProject(saveAs) {
   if (!state.project) return;
   const project = state.project;
+  let target = saveAs ? null : state.fileHandle;
+  // dossier projet ouvert : le projet s'enregistre dedans, sans boîte de dialogue
+  if (!target && !saveAs && state.dirHandle && await ensureWrite(state.dirHandle)) {
+    target = await state.dirHandle.getFileHandle(`${fileSafe(state.dirHandle.name)}.walktest.json`, { create: true });
+  }
   const handle = await saveBlob(async () => new Blob([await serializeProject(project)], { type: 'application/json' }),
-    `${fileSafe(project.name)}.walktest.json`, PROJECT_TYPE, saveAs ? null : state.fileHandle);
+    `${fileSafe(project.name)}.walktest.json`, PROJECT_TYPE, target);
   state.fileHandle = handle;
   state.dirty = false;
   setStatus(`Projet enregistré${handle ? ` (${handle.name})` : ''}`);
@@ -371,6 +407,42 @@ async function openProject() {
   await restartAutosave();
 }
 
+/**
+ * Dossier projet : crée le projet à partir des plans du dossier (un étage par plan, triés par
+ * numéro d'étage), ou reprend le projet déjà enregistré dedans en y ajoutant les nouveaux plans.
+ */
+async function openFolder() {
+  if (!window.showDirectoryPicker) throw new Error('Ouverture de dossier indisponible dans ce navigateur : utilisez Edge ou Chrome.');
+  if (!abandonOk() || !discardRecoveryOk()) return;
+  const dir = await showDirectoryPicker({ id: 'projects', mode: 'readwrite' });
+  setStatus(`Lecture du dossier « ${dir.name} »…`);
+  const found = await readProjectFolder(dir);
+  const existing = !!found.projectFile;
+  const project = existing
+    ? await deserializeProject(await (await found.projectFile.getFile()).text())
+    : createProject({ name: found.name });
+  const added = [], unreadable = [];
+  for (const file of newPlans(project, found.plans)) {
+    let bmp;
+    try { bmp = await loadImage(file); } catch { unreadable.push(file.name); continue; }
+    addFloor(project, { name: floorNameFromFile(file.name), image: { blob: file, name: file.name, type: file.type, width: bmp.width, height: bmp.height } });
+    added.push(floorNameFromFile(file.name));
+  }
+  if (!project.floors.length) throw new Error(`Aucun plan PNG ou JPG dans « ${dir.name}/${PLANS_DIR} ».`);
+  project.floors.sort((a, b) => compareFloorNames(a.name, b.name));
+  attachSession(null);
+  await showProject(project, found.projectFile);
+  state.dirHandle = dir;
+  state.dirty = !existing || added.length > 0;
+  const ignored = [...unreadable, ...found.ignored];
+  setStatus(`${existing ? 'Projet repris' : 'Projet créé'} : ${project.floors.length} étage${project.floors.length > 1 ? 's' : ''}`
+    + (existing && added.length ? `, nouveaux plans : ${added.join(', ')}` : '')
+    + (ignored.length ? ` — ignorés : ${ignored.join(', ')}` : ''));
+  render();
+  await restartAutosave();
+}
+
+document.querySelectorAll('.btn-open-folder').forEach(b => b.addEventListener('click', () => runFileAction(openFolder)));
 $('btn-save').addEventListener('click', () => runFileAction(() => saveProject(false)));
 $('btn-save-as').addEventListener('click', () => runFileAction(() => saveProject(true)));
 document.querySelectorAll('.btn-open').forEach(b => b.addEventListener('click', () => runFileAction(openProject)));
@@ -383,22 +455,22 @@ window.addEventListener('keydown', e => {
 
 $('btn-export-csv').addEventListener('click', () => runFileAction(async () => {
   const fl = state.floor;
-  await saveBlob(() => new Blob([floorCsv(fl)], { type: 'text/csv' }), `${fileSafe(`${state.project.name} - ${fl.name}`)}.csv`,
+  await exportFile(async () => new Blob([floorCsv(fl)], { type: 'text/csv' }), `${fileSafe(`${state.project.name} - ${fl.name}`)}.csv`,
     { description: 'CSV', accept: { 'text/csv': ['.csv'] } });
-  setStatus('CSV exporté');
 }));
 
 $('btn-export-png').addEventListener('click', () => runFileAction(async () => {
   const fl = state.floor, project = state.project, bmp = state.bitmap;
-  await saveBlob(() => floorPng(project, fl, bmp), `${fileSafe(`${project.name} - ${fl.name}`)}.png`,
+  await exportFile(() => floorPng(project, fl, bmp), `${fileSafe(`${project.name} - ${fl.name}`)}.png`,
     { description: 'Image PNG', accept: { 'image/png': ['.png'] } });
-  setStatus('PNG exporté');
 }));
 
-// tous les étages d'un coup : PNG + CSV de chaque étage et un CSV commun, dans un dossier choisi
+// tous les étages d'un coup : PNG + CSV de chaque étage et un CSV commun,
+// dans « exports » du dossier projet, sinon dans un dossier choisi
 $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
   const project = state.project, base = `${project.name} - `;
-  const dir = window.showDirectoryPicker ? await showDirectoryPicker({ id: 'exports', mode: 'readwrite' }) : null;
+  const dir = await exportsDir()
+    || (window.showDirectoryPicker ? await showDirectoryPicker({ id: 'exports', mode: 'readwrite' }) : null);
   const files = project.floors.flatMap(fl => [
     { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
     { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl)], { type: 'text/csv' }) },
@@ -407,17 +479,17 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
     setStatus(`Export ${i + 1}/${files.length}…`);
     const blob = await f.make(), name = fileSafe(f.name);
     if (!dir) { downloadBlob(blob, name); continue; }
-    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
-    await w.write(blob);
-    await w.close();
+    await writeHandle(await dir.getFileHandle(name, { create: true }), blob);
   }
-  setStatus(`${files.length} fichiers exportés${dir ? ` dans « ${dir.name} »` : ''}`);
+  const where = dir ? (state.dirHandle && dir.name === EXPORTS_DIR ? `${state.dirHandle.name}/${EXPORTS_DIR}` : dir.name) : '';
+  setStatus(`${files.length} fichiers exportés${where ? ` dans « ${where} »` : ''}`);
 }));
 
 function renderSaveState() {
   const el = $('save-state');
   if (!state.project) return;
-  el.textContent = state.dirty ? '● Modifications non enregistrées'
+  el.textContent = state.dirty
+    ? `● Modifications non enregistrées${state.dirHandle && !state.fileHandle ? ' (Ctrl+S les enregistre dans le dossier)' : ''}`
     : state.fileHandle ? `Enregistré dans ${state.fileHandle.name}` : 'Enregistré';
   el.classList.toggle('ko', state.dirty);
   if (state.autosavedAt) {
@@ -614,6 +686,8 @@ function render() {
     if (!$('thresholds').childElementCount) renderThresholds();
     $('p-name').textContent = p.name;
     $('p-building').textContent = p.building || '—';
+    $('p-folder').textContent = state.dirHandle ? state.dirHandle.name : '';
+    $('p-folder').hidden = $('p-folder-label').hidden = !state.dirHandle;
     $('p-floor').textContent = fl.name;
     $('p-plan').textContent = `${fl.image.name} (${fl.image.width} × ${fl.image.height} px)`;
 
@@ -690,6 +764,14 @@ const MEASURE_HELP = {
   paused: 'En pause : les mesures reçues ne sont pas enregistrées.',
 };
 
+// un étage qu'on n'a pas pu finir se complète plus tard : les nouveaux passages s'ajoutent
+function idleHelp(fl, streaming) {
+  const n = floorSampleCount(fl);
+  if (!streaming) return 'Connectez la radio pour pouvoir mesurer.';
+  return n ? `${fl.name} a déjà ${nf(n)} mesures : « Continuer les mesures » ajoute un nouveau passage, sans rien effacer.`
+    : 'Cliquez « Démarrer », puis votre position de départ sur le plan.';
+}
+
 function renderMeasure() {
   const ses = state.session, fl = state.floor;
   $('sec-measure').hidden = !ses;
@@ -700,9 +782,10 @@ function renderMeasure() {
     ? (radioStuck ? STUCK_MSG + ' Puis « Reprendre » à votre position.'
       : reconnecting ? 'Radio déconnectée : reconnexion automatique en cours… Ne reprenez qu\'une fois la radio « en mesure ».'
       : 'Radio déconnectée : reconnectez-la, puis « Reprendre » à votre position.')
-    : MEASURE_HELP[st] || (streaming ? 'Cliquez « Démarrer », puis votre position de départ sur le plan.' : 'Connectez la radio pour pouvoir mesurer.');
+    : MEASURE_HELP[st] || idleHelp(fl, streaming);
   help.classList.toggle('warn', st !== 'idle' && !streaming);
   $('btn-start').hidden = st !== 'idle';
+  $('btn-start').textContent = floorSampleCount(fl) ? 'Continuer les mesures' : 'Démarrer';
   $('btn-pause').hidden = st !== 'walking' && st !== 'paused';
   $('btn-pause').textContent = st === 'paused' ? 'Reprendre' : 'Pause';
   $('btn-pause').classList.toggle('primary', st === 'paused');

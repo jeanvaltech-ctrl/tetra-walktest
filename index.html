@@ -103,7 +103,9 @@
         <button type="submit" class="primary">Créer le projet</button>
         <p id="new-error" class="ko" hidden></p>
       </form>
-      <p class="muted small">ou reprendre un projet enregistré :</p>
+      <p class="muted small">ou travailler dans un dossier projet (sous-dossier « plans » avec un plan par étage) :</p>
+      <button class="btn-open-folder primary">Ouvrir un dossier projet…</button>
+      <p class="muted small">ou reprendre un fichier projet enregistré :</p>
       <button class="btn-open">Ouvrir un projet…</button>
       <input id="open-file" type="file" accept=".json,application/json" hidden>
     </section>
@@ -113,6 +115,7 @@
       <dl class="info">
         <dt>Projet</dt><dd id="p-name"></dd>
         <dt>Bâtiment</dt><dd id="p-building"></dd>
+        <dt id="p-folder-label">Dossier</dt><dd id="p-folder"></dd>
         <dt>Étage</dt><dd id="p-floor"></dd>
         <dt>Plan</dt><dd id="p-plan"></dd>
       </dl>
@@ -130,6 +133,7 @@
       <p id="save-state" class="muted small"></p>
       <div class="row">
         <button id="btn-new-project">Nouveau projet…</button>
+        <button class="btn-open-folder">Ouvrir un dossier…</button>
         <button class="btn-open">Ouvrir…</button>
       </div>
     </section>

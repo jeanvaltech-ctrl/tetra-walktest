@@ -11,6 +11,7 @@ import { ViewTransform, metersPerPixel, niceLength } from '../js/geometry.js';
 import { setCalibration, createProject, addFloor, removeFloor, floorSampleCount, serializeProject, deserializeProject } from '../js/project.js';
 import { floorCsv, projectCsv, floorPng, caption, CSV_COLUMNS } from '../js/export.js';
 import { AutoSave } from '../js/autosave.js';
+import { readProjectFolder, newPlans, floorNameFromFile, floorNumber, compareFloorNames } from '../js/folder.js';
 
 const ATP = 'fixtures/demo.atp';
 const GOLDEN = 'fixtures/demo_mtp_trace.csv';
@@ -307,6 +308,35 @@ await test('Plusieurs étages : CSV commun trié par heure, suppression d\'un é
   let err = null;
   try { removeFloor(project, f2.id); } catch (e) { err = e; }
   assert(err && project.floors.length === 1, 'le dernier étage a été supprimé');
+});
+
+// ---------- dossier projet ----------
+await test('Dossier projet : noms et ordre des étages', () => {
+  assert(floorNameFromFile('Floor -1.png') === 'Floor -1' && floorNameFromFile('Floor 00.JPG') === 'Floor 00', 'noms');
+  const cases = [['Floor -1', -1], ['Floor 00', 0], ['Floor 01', 1], ['Niveau +2', 2], ['Étage -2 parking', -2], ['Toiture', null]];
+  for (const [n, want] of cases) assert(floorNumber(n) === want, `${n} -> ${floorNumber(n)}`);
+  const sorted = ['Floor 01', 'Toiture', 'Floor -1', 'Floor 10', 'Floor 00', 'Floor -2', 'Annexe', 'Floor 02'].sort(compareFloorNames);
+  assert(sorted.join(',') === 'Floor -2,Floor -1,Floor 00,Floor 01,Floor 02,Floor 10,Annexe,Toiture', sorted.join(','));
+});
+
+await test('Dossier projet : lecture des plans et du projet enregistré', async () => {
+  const png = await (await sampleProject()).floor.image.blob;
+  const file = name => ({ kind: 'file', name, getFile: async () => new File([png], name, { type: name.endsWith('.png') ? 'image/png' : 'image/jpeg' }) });
+  const dir = (name, children) => ({ kind: 'directory', name, async *values() { yield* children; } });
+  const root = dir('SSV_Site_21-10-2026', [
+    dir('Plans', [file('Floor 01.jpg'), file('Floor -1.png'), file('Floor 00.png'), file('notes.txt'), file('Floor 02.pdf')]),
+    file('SSV_Site_21-10-2026.walktest.json'), file('autre.walktest.json'),
+  ]);
+  const found = await readProjectFolder(root);
+  assert(found.name === 'SSV_Site_21-10-2026', found.name);
+  assert(found.plans.map(p => p.name).join(',') === 'Floor -1.png,Floor 00.png,Floor 01.jpg', found.plans.map(p => p.name).join(','));
+  assert(found.ignored.join(',') === 'notes.txt,Floor 02.pdf', 'ignorés : ' + found.ignored.join(','));
+  assert(found.projectFile && found.projectFile.name === 'SSV_Site_21-10-2026.walktest.json', 'fichier projet');
+  const project = createProject({ name: 'x' });
+  addFloor(project, { name: 'Sous-sol', image: { name: 'floor -1.PNG' } });   // déjà importé (casse différente)
+  assert(newPlans(project, found.plans).map(p => p.name).join(',') === 'Floor 00.png,Floor 01.jpg', 'nouveaux plans');
+  const flat = await readProjectFolder(dir('Sans sous-dossier', [file('B.png'), file('A.png')]));
+  assert(flat.plans.length === 2 && flat.projectFile === null, 'plans à la racine');
 });
 
 await test('Fichier projet : enregistrer puis rouvrir à l\'identique', async () => {

@@ -38,13 +38,34 @@ Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
 5. « Fin de segment » / « Terminer » : cliquer d'abord le dernier point, sinon les mesures
    reçues depuis le dernier clic sont perdues (l'appli demande confirmation).
 
+### Dossier projet (recommandé)
+
+Préparer un dossier par bâtiment, avec un plan par étage dans un sous-dossier `plans` :
+
+```
+SSV_Site_21-10-2026/            nom du dossier = nom du projet
+  plans/                        Floor -1.png, Floor 00.jpg, Floor 01.png…
+  SSV_Site_21-10-2026.walktest.json   créé par l'appli à l'enregistrement
+  exports/                      créé par l'appli : PNG et CSV
+```
+
+« **Ouvrir un dossier projet…** » crée un étage par plan, triés du plus bas au plus haut d'après le
+numéro dans le nom (`-1`, `00`, `01`…). Ensuite, sans aucune boîte de dialogue : Ctrl+S enregistre
+le projet dans le dossier, et les exports vont dans `exports/`. En rouvrant le même dossier plus
+tard, on reprend le projet là où on l'avait laissé ; les plans ajoutés entre-temps deviennent de
+nouveaux étages. Les fichiers autres que PNG / JPG (PDF…) sont signalés et ignorés.
+
 ### Plusieurs étages
 
-Un projet = un bâtiment, avec autant d'étages que nécessaire, chacun avec son plan, son échelle
-et ses mesures (panneau **Étages**). « Ajouter un étage… » (ou glisser un plan sur la zone
-centrale) ; cliquer un étage pour l'afficher. **En pleine mesure**, cliquer d'abord son dernier
-point, puis l'étage suivant : la mesure se termine sur l'ancien étage et reprend aussitôt sur le
-nouveau, il n'y a plus qu'à cliquer sa position de départ.
+Chaque étage a son plan, son échelle et ses mesures (panneau **Étages**). « Ajouter un étage… »
+(ou glisser un plan sur la zone centrale) ; cliquer un étage pour l'afficher.
+
+- **Changer d'étage en pleine mesure** : cliquer d'abord son dernier point, puis l'étage suivant :
+  la mesure se termine sur l'ancien étage et reprend aussitôt sur le nouveau, il n'y a plus qu'à
+  cliquer sa position de départ.
+- **Compléter un étage plus tard** (bâtiment qu'on ne peut pas faire d'une traite) : revenir sur
+  l'étage et cliquer « **Continuer les mesures** » : les nouveaux passages s'ajoutent aux
+  précédents, rien n'est effacé.
 
 ### Enregistrer et exporter
 
@@ -106,6 +127,7 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `js/render.js` | dessin de la trace, de la légende et de l'échelle (écran et export) |
 | `js/export.js` | export CSV et PNG par étage |
 | `js/project.js` | modèle de projet et fichier `.walktest.json` |
+| `js/folder.js` | dossier projet : plans, tri des étages, projet enregistré |
 | `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
 | `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
 | `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |
