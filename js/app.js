@@ -79,6 +79,18 @@ view.drawOverlay = drawOverlay;
 
 function setStatus(text) { $('status').textContent = text; }
 
+// notification bien visible (bas de l'écran) pour confirmer une action : enregistrement, exports…
+let toastTimer = 0;
+function notify(text, kind = 'ok', ms = 5000) {
+  const t = $('toast');
+  t.textContent = (kind === 'ok' ? '✔ ' : kind === 'ko' ? '✘ ' : '') + text;
+  t.className = `toast ${kind}`;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  if (ms) toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  setStatus(text);
+}
+
 // ---------- chargement du plan ----------
 async function loadImage(file) {
   if (!/^image\/(png|jpeg)$/.test(file.type)) throw new Error(`Format non pris en charge (${file.type || file.name}) : PNG ou JPG uniquement.`);
@@ -174,9 +186,24 @@ async function switchFloor(fl) {
   render();
 }
 
-$('floor-list').addEventListener('click', e => {
-  const b = e.target.closest('[data-floor]');
-  if (b) switchFloor(state.project.floors.find(f => f.id === b.dataset.floor));
+// liste déroulante + étage du dessous / du dessus (les étages sont rangés du plus bas au plus haut)
+async function goToFloor(fl) {
+  await switchFloor(fl);
+  renderFloors();          // changement refusé : la liste revient sur l'étage affiché
+}
+function adjacentFloor(step) {
+  const fs = state.project.floors;
+  return fs[fs.indexOf(state.floor) + step];
+}
+$('floor-select').addEventListener('change', e => goToFloor(state.project.floors.find(f => f.id === e.target.value)));
+$('btn-floor-down').addEventListener('click', () => goToFloor(adjacentFloor(-1)));
+$('btn-floor-up').addEventListener('click', () => goToFloor(adjacentFloor(+1)));
+window.addEventListener('keydown', e => {
+  if (!state.project || e.ctrlKey || e.altKey || e.metaKey || e.target.closest('input, textarea, select')) return;
+  if (e.key === 'PageUp' || e.key === 'PageDown') {
+    e.preventDefault();
+    goToFloor(adjacentFloor(e.key === 'PageUp' ? +1 : -1));
+  }
 });
 
 $('btn-floor-add').addEventListener('click', () => {
@@ -199,6 +226,7 @@ $('form-floor').addEventListener('submit', e => runFileAction(async () => {
     image: { blob: file, name: file.name, type: file.type, width: bmp.width, height: bmp.height },
   });
   bitmaps.set(fl.id, bmp);
+  state.project.floors.sort((a, b) => compareFloorNames(a.name, b.name));   // ▲ / ▼ suivent l'ordre des étages
   f.hidden = true;
   markDirty();
   if (state.session.state === 'idle') { await showFloor(fl); setStatus(`Étage ajouté : ${fl.name}`); render(); }
@@ -232,14 +260,21 @@ function renderFloors() {
   const p = state.project;
   $('sec-floors').hidden = !p;
   if (!p) return;
-  $('floor-list').innerHTML = p.floors.map(f => {
+  const measuring = state.session && state.session.state !== 'idle';
+  const count = f => { const n = floorSampleCount(f); return n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure'; };
+  const sel = $('floor-select');
+  // libellé court (la barre latérale est étroite) : nom, nombre de mesures entre parenthèses
+  sel.innerHTML = p.floors.map(f => {
     const n = floorSampleCount(f);
-    const measuring = f === state.floor && state.session && state.session.state !== 'idle';
-    const meta = [measuring ? '● en mesure' : '', n ? `${nf(n)} mesure${n > 1 ? 's' : ''}` : 'aucune mesure', f.calibration ? 'échelle' : '']
-      .filter(Boolean).join(' · ');
-    return `<li><button class="floor-item" data-floor="${f.id}" aria-current="${f === state.floor}">`
-      + `<span>${esc(f.name)}</span><span class="meta">${meta}</span></button></li>`;
+    return `<option value="${f.id}">${esc(f.name)}${n ? ` (${nf(n)})` : ''}${f === state.floor && measuring ? ' ●' : ''}</option>`;
   }).join('');
+  sel.value = state.floor.id;
+  const i = p.floors.indexOf(state.floor), fl = state.floor;
+  $('btn-floor-down').disabled = i <= 0;
+  $('btn-floor-up').disabled = i >= p.floors.length - 1;
+  $('floor-meta').textContent = [`Étage ${i + 1} sur ${p.floors.length}`, measuring ? '● en mesure' : '', count(fl),
+    `${fl.segments.length} segment${fl.segments.length > 1 ? 's' : ''}`, fl.calibration ? 'échelle calibrée' : 'non calibré']
+    .filter(Boolean).join(' · ');
   $('btn-floor-delete').disabled = p.floors.length < 2;
 }
 
@@ -346,12 +381,13 @@ async function exportsDir() {
 async function exportFile(makeBlob, name, type) {
   const dir = await exportsDir();
   if (!dir) {
-    await saveBlob(makeBlob, name, type);
-    setStatus(`${name} exporté`);
+    const handle = await saveBlob(makeBlob, name, type);
+    notify(handle ? `Exporté : ${handle.name}` : `Téléchargé : ${name}`);
     return;
   }
+  notify(`Export de ${name}…`, 'busy', 0);
   await writeHandle(await dir.getFileHandle(name, { create: true }), await makeBlob());
-  setStatus(`${name} exporté dans ${state.dirHandle.name}/${EXPORTS_DIR}`);
+  notify(`Exporté dans ${state.dirHandle.name}/${EXPORTS_DIR} : ${name}`);
 }
 
 function downloadBlob(blob, name) {
@@ -364,7 +400,10 @@ function downloadBlob(blob, name) {
 
 async function runFileAction(fn) {
   try { await fn(); }
-  catch (e) { if (e.name !== 'AbortError') setStatus(`Erreur : ${e.message}`); }   // AbortError = boîte annulée
+  catch (e) {
+    if (e.name === 'AbortError') { $('toast').hidden = true; return; }   // boîte annulée
+    notify(`Erreur : ${e.message}`, 'ko', 10000);
+  }
 }
 
 async function saveProject(saveAs) {
@@ -379,7 +418,7 @@ async function saveProject(saveAs) {
     `${fileSafe(project.name)}.walktest.json`, PROJECT_TYPE, target);
   state.fileHandle = handle;
   state.dirty = false;
-  setStatus(`Projet enregistré${handle ? ` (${handle.name})` : ''}`);
+  notify(handle ? `Projet enregistré : ${handle.name}` : 'Projet téléchargé');
   renderSaveState();
   autosaveNow();
 }
@@ -402,7 +441,7 @@ async function openProject() {
   const project = await deserializeProject(await file.text());
   attachSession(null);
   await showProject(project, handle);
-  setStatus(`Projet ouvert : ${file.name}`);
+  notify(`Projet ouvert : ${file.name}`);
   render();
   await restartAutosave();
 }
@@ -435,9 +474,9 @@ async function openFolder() {
   state.dirHandle = dir;
   state.dirty = !existing || added.length > 0;
   const ignored = [...unreadable, ...found.ignored];
-  setStatus(`${existing ? 'Projet repris' : 'Projet créé'} : ${project.floors.length} étage${project.floors.length > 1 ? 's' : ''}`
+  notify(`${existing ? 'Projet repris' : 'Projet créé'} : ${project.floors.length} étage${project.floors.length > 1 ? 's' : ''}`
     + (existing && added.length ? `, nouveaux plans : ${added.join(', ')}` : '')
-    + (ignored.length ? ` — ignorés : ${ignored.join(', ')}` : ''));
+    + (ignored.length ? ` — ignorés : ${ignored.join(', ')}` : ''), 'ok', 8000);
   render();
   await restartAutosave();
 }
@@ -476,13 +515,13 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
     { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl)], { type: 'text/csv' }) },
   ]).concat({ name: `${base}tous les étages.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
   for (const [i, f] of files.entries()) {
-    setStatus(`Export ${i + 1}/${files.length}…`);
+    notify(`Export ${i + 1}/${files.length}…`, 'busy', 0);
     const blob = await f.make(), name = fileSafe(f.name);
     if (!dir) { downloadBlob(blob, name); continue; }
     await writeHandle(await dir.getFileHandle(name, { create: true }), blob);
   }
   const where = dir ? (state.dirHandle && dir.name === EXPORTS_DIR ? `${state.dirHandle.name}/${EXPORTS_DIR}` : dir.name) : '';
-  setStatus(`${files.length} fichiers exportés${where ? ` dans « ${where} »` : ''}`);
+  notify(`${files.length} fichiers exportés${where ? ` dans « ${where} »` : ' (téléchargements)'}`, 'ok', 7000);
 }));
 
 function renderSaveState() {

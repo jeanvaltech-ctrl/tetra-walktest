@@ -73,14 +73,19 @@ table.neigh th:first-child, table.neigh td:first-child { text-align: left; }
 
 dl.stats { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
 
-ul.floors { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.floor-item {
-  width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
-  text-align: left; padding: 6px 10px;
-}
-.floor-item .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.floor-item[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font-weight: 600; }
+.floor-pick { flex-wrap: nowrap; }
+.floor-pick select { flex: 1; min-width: 0; }
+select { font: inherit; color: var(--fg); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+#floor-meta { margin: 6px 0 8px; }
 #form-floor { margin-top: 10px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 10;
+  max-width: min(560px, calc(100vw - 32px)); padding: 12px 18px; border-radius: 10px;
+  background: #1f6f3a; color: #fff; font-weight: 500; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+}
+.toast.ko { background: #b3261e; }
+.toast.busy { background: #2b3440; }
 details > summary {
   cursor: pointer; font-size: 13px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted);

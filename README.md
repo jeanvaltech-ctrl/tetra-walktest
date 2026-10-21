@@ -58,7 +58,8 @@ nouveaux étages. Les fichiers autres que PNG / JPG (PDF…) sont signalés et i
 ### Plusieurs étages
 
 Chaque étage a son plan, son échelle et ses mesures (panneau **Étages**). « Ajouter un étage… »
-(ou glisser un plan sur la zone centrale) ; cliquer un étage pour l'afficher.
+(ou glisser un plan sur la zone centrale) ; choisir l'étage dans la liste déroulante, ou passer à
+l'étage du dessous / du dessus avec ▼ / ▲ (touches Page↓ / Page↑).
 
 - **Changer d'étage en pleine mesure** : cliquer d'abord son dernier point, puis l'étage suivant :
   la mesure se termine sur l'ancien étage et reprend aussitôt sur le nouveau, il n'y a plus qu'à

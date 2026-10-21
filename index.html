@@ -61,7 +61,12 @@
 
     <section id="sec-floors" hidden>
       <h2>Étages</h2>
-      <ul id="floor-list" class="floors"></ul>
+      <div class="row floor-pick">
+        <button id="btn-floor-down" title="Étage inférieur (Page↓)" aria-label="Étage inférieur">▼</button>
+        <select id="floor-select" aria-label="Étage affiché"></select>
+        <button id="btn-floor-up" title="Étage supérieur (Page↑)" aria-label="Étage supérieur">▲</button>
+      </div>
+      <p id="floor-meta" class="muted small"></p>
       <div class="row">
         <button id="btn-floor-add">Ajouter un étage…</button>
         <button id="btn-floor-rename">Renommer…</button>
@@ -186,6 +191,7 @@
     <div id="drop-hint" class="drop-hint">Créez un projet, ou glissez ici le plan d'un étage (PNG, JPG).</div>
   </main>
 </div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
