@@ -31,7 +31,9 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 4. Mesure par **waypoints** : clic = position actuelle ; les échantillons reçus entre deux clics
    sont répartis linéairement le long du segment (comme SCOUT). Démarrer / pause / fin de segment.
 5. Trace colorée en direct selon des seuils RSSI configurables (défaut = légende SCOUT :
-   ≥-65 rouge, ≥-72 orange, ≥-85 jaune, ≥-87 vert, ≥-98 bleu, sinon noir/« No »).
+   ≥-65 rouge, ≥-67 orange, ≥-85 jaune, ≥-87 vert, ≥-98 bleu, sinon noir/« No »).
+   Seuils vérifiés sur un export SCOUT (couleur dessinée pour chaque RSSI du .atp) ; « ≥-72
+   orange » était une erreur (corrigée le 22/10/2026 après comparaison terrain avec SCOUT).
 6. Panneau live : LA, canal, RSSI, C1 + voisines (identifiées par LA).
 7. Export par étage : CSV (temps, étage, x, y, LA, canal, RSSI, C1, voisines) + PNG du plan avec trace.
 8. Sauvegarde du projet (fichier local) pour pouvoir reprendre.

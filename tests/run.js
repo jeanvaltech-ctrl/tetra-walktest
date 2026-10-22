@@ -3,7 +3,7 @@
 // anonymisée par tools/anonymize_atp.py (identité radio, LA et canaux fictifs).
 import { buildCmd, CMD, Deframer, parseInfo } from '../js/protocol.js';
 import { Radio } from '../js/radio.js';
-import { rssiColor } from '../js/thresholds.js';
+import { rssiColor, upgradeThresholds, DEFAULT_THRESHOLDS } from '../js/thresholds.js';
 import { Session, floorStats } from '../js/session.js';
 import { FakePort, radioFrame, cmdHex } from './fakeport.js';
 import { parseAtp } from '../js/atp.js';
@@ -189,9 +189,15 @@ await test('Radio : câble débranché pendant le flux', async () => {
 });
 
 await test('Seuils RSSI : légende SCOUT', () => {
-  const cases = [[-50, '#e00000'], [-65, '#e00000'], [-66, '#ff8c00'], [-72, '#ff8c00'], [-85, '#ffd800'],
+  // seuils relevés sur un export SCOUT : orange -66/-67 seulement, jaune dès -68
+  const cases = [[-50, '#e00000'], [-65, '#e00000'], [-66, '#ff8c00'], [-67, '#ff8c00'], [-68, '#ffd800'], [-72, '#ffd800'], [-85, '#ffd800'],
     [-86, '#22b14c'], [-87, '#22b14c'], [-88, '#1e3fd8'], [-98, '#1e3fd8'], [-99, '#000000'], ['', '#000000']];
   for (const [r, c] of cases) assert(rssiColor(r) === c, `${r} -> ${rssiColor(r)}`);
+  // projet enregistré avec l'ancienne légende par défaut (orange jusqu'à -72) : corrigé à l'ouverture
+  const old = { thresholds: [-65, -72, -85, -87, -98].map((min, i) => ({ min, color: DEFAULT_THRESHOLDS[i].color })) };
+  assert(upgradeThresholds(old) && old.thresholds[1].min === -67, 'ancienne légende non corrigée');
+  const custom = { thresholds: [-60, -70, -80, -90, -100].map(min => ({ min, color: '#123456' })) };
+  assert(!upgradeThresholds(custom) && custom.thresholds[1].min === -70, 'légende personnalisée modifiée');
 });
 
 // ---------- session par waypoints (M3) ----------

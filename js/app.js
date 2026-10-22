@@ -5,7 +5,7 @@ import { floorCsv, projectCsv, floorPng, fileSafe } from './export.js';
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
-import { rssiColor, textOn, DEFAULT_THRESHOLDS } from './thresholds.js';
+import { rssiColor, textOn, DEFAULT_THRESHOLDS, upgradeThresholds } from './thresholds.js';
 import { Session, floorStats } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
@@ -137,6 +137,7 @@ async function floorBitmap(fl) {
 /** Affiche un projet (nouveau, ouvert ou récupéré) sur l'étage demandé (1er par défaut). */
 async function showProject(project, handle, floorId = null, session = null) {
   project.criterion ??= { ...DEFAULT_CRITERION };   // copie de secours d'avant le critère ASTRID
+  const legendUpgraded = upgradeThresholds(project);   // ancienne légende (orange jusqu'à -72)
   state.project = project;
   state.floor = null;
   state.fileHandle = handle;
@@ -148,6 +149,9 @@ async function showProject(project, handle, floorId = null, session = null) {
   $('sec-recover').hidden = true;
   $('form-floor').hidden = true;
   await showFloor(project.floors.find(f => f.id === floorId) || project.floors[0], session);
+  // la correction se refait à chaque ouverture tant que le projet n'est pas réenregistré ;
+  // le message vient après celui de l'ouverture du projet
+  if (legendUpgraded) setTimeout(() => notify(t('notify.legendUpgraded'), 'ok', 10000), 4000);
 }
 
 /** Affiche un étage avec sa propre session de mesure. */

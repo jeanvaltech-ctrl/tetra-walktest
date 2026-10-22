@@ -1,7 +1,10 @@
 // sw.js — mise en cache de l'appli pour un usage hors ligne (sous-sols, parkings).
 // Stratégie « réseau d'abord » : toujours la dernière version si on est en ligne,
 // la copie en cache sinon. Incrémenter VERSION quand la liste APP change.
-const VERSION = 'v11';
+// Les requêtes réseau revalident le cache HTTP du navigateur (cache: 'no-cache') : sans ça,
+// juste après une mise à jour, un module récent pouvait côtoyer un module encore en cache
+// HTTP (GitHub Pages : 10 min) et l'appli refusait de démarrer.
+const VERSION = 'v12';
 const CACHE = `tetra-walktest-${VERSION}`;
 const APP = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
@@ -10,7 +13,8 @@ const APP = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -23,7 +27,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req).then(res => {
+    fetch(req, { cache: 'no-cache' }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }))

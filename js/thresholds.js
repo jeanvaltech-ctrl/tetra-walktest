@@ -1,14 +1,27 @@
 // thresholds.js — classes de RSSI et couleurs (défaut = légende SCOUT).
 // Le premier seuil atteint (rssi >= min) donne la couleur ; en dessous du dernier : « No ».
+// Seuils mesurés sur un export PNG de SCOUT comparé à son .atp (couleur dessinée pour chaque
+// RSSI) : orange = -66 / -67 seulement, jaune de -68 à -85, vert -86 / -87, bleu dès -88.
 
 export const DEFAULT_THRESHOLDS = [
   { min: -65, color: '#e00000' },   // rouge
-  { min: -72, color: '#ff8c00' },   // orange
+  { min: -67, color: '#ff8c00' },   // orange
   { min: -85, color: '#ffd800' },   // jaune
   { min: -87, color: '#22b14c' },   // vert
   { min: -98, color: '#1e3fd8' },   // bleu
 ];
 export const NO_COVERAGE = { color: '#000000', label: 'No' };
+
+// Ancienne légende par défaut (jusqu'au 22/10/2026) : orange jusqu'à -72, plus large que SCOUT.
+const OLD_DEFAULT_MINS = [-65, -72, -85, -87, -98];
+
+/** Projet enregistré avec l'ancienne légende par défaut : passe à la légende SCOUT corrigée. */
+export function upgradeThresholds(project) {
+  const mins = (project.thresholds || []).map(t => t.min);
+  if (mins.join() !== OLD_DEFAULT_MINS.join()) return false;
+  project.thresholds = DEFAULT_THRESHOLDS.map(t => ({ ...t }));
+  return true;
+}
 
 export function rssiColor(rssi, thresholds = DEFAULT_THRESHOLDS) {
   if (typeof rssi !== 'number') return NO_COVERAGE.color;
