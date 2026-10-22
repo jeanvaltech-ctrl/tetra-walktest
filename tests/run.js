@@ -394,6 +394,9 @@ await test('Export PNG : taille, trace colorée, bandeau', async () => {
   assert(px(150, 150) === '224,0,0', `rouge attendu à -60 dBm : ${px(150, 150)}`);
   assert(px(250, 150) === '30,63,216', `bleu attendu à -95 dBm : ${px(250, 150)}`);
   assert(px(5, bmp.height - 5) === '241,243,245', `bandeau : ${px(5, bmp.height - 5)}`);
+  // la trace va jusqu'aux points cliqués : près de l'extrémité droite du tronçon (350,150), du bleu
+  // (avant, la dernière mesure s'arrêtait à mi-chemin, vers x = 300)
+  assert(px(338, 150) === '30,63,216', `fin de tronçon : ${px(338, 150)}`);
   assert(caption(project, floor).includes('3 mesures'), caption(project, floor));
 });
 

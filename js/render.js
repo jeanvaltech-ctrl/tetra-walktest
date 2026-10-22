@@ -19,7 +19,8 @@ export function drawLabel(ctx, text, x, y) {
   ctx.fillText(text, x, y);
 }
 
-// trace : chaque échantillon couvre la moitié du chemin vers ses voisins, dans sa couleur
+// trace : chaque échantillon couvre la moitié du chemin vers ses voisins, dans sa couleur.
+// Aux extrémités d'un tronçon, il va jusqu'au point cliqué (sinon les coins seraient coupés en biais).
 export function drawTrace(ctx, t, floor, thresholds, k = 1) {
   ctx.save();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -30,13 +31,18 @@ export function drawTrace(ctx, t, floor, thresholds, k = 1) {
 
     const ss = seg.samples.map(s => t.toScreen(s));
     ctx.lineWidth = 7 * k;
+    const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
     for (let i = 0; i < ss.length; i++) {
-      const p = ss[i], a = ss[i - 1] || p, b = ss[i + 1] || p;
+      const p = ss[i], leg = seg.samples[i].leg;
+      const sameLeg = j => j >= 0 && j < ss.length && seg.samples[j].leg === leg;
+      // tronçon leg : du point leg-1 au point leg ; à défaut (ancien format), voisin le plus proche
+      const from = sameLeg(i - 1) ? mid(ss[i - 1], p) : (pts[leg - 1] || mid(ss[i - 1] || p, p));
+      const to = sameLeg(i + 1) ? mid(p, ss[i + 1]) : (pts[leg] || mid(p, ss[i + 1] || p));
       ctx.strokeStyle = rssiColor(seg.samples[i].rssi, thresholds);
       ctx.beginPath();
-      ctx.moveTo((a.x + p.x) / 2, (a.y + p.y) / 2);
+      ctx.moveTo(from.x, from.y);
       ctx.lineTo(p.x, p.y);
-      ctx.lineTo((b.x + p.x) / 2, (b.y + p.y) / 2);
+      ctx.lineTo(to.x, to.y);
       ctx.stroke();
     }
 
