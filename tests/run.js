@@ -114,7 +114,7 @@ await test('Barre d\'échelle : longueurs rondes', () => {
 });
 
 // ---------- radio (M2) ----------
-// Formats relevés sur le MTP6550 le 21/10/2026 (valeurs fictives).
+// Formats relevés sur le MTP6550 (valeurs fictives).
 const ascii = s => [...s].map(c => c.charCodeAt(0));
 const FAKE_INFO = {
   0x00: [0x00, 0x12, 0xd6, 0x87],                                   // ISSI 1234567 (4 octets)

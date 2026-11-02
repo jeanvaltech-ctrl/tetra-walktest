@@ -1,7 +1,7 @@
 # Motorola MTP6550 — protocole de trace (rétro-ingénierie SCOUT 19.12.1)
 
-Reconstitué le 21/10/2026 à partir d'une capture USBPcap pendant une mesure SCOUT
-(parking souterrain, 2 étages), puis **validé en direct** avec `tools/mtp_live.py`
+Reconstitué à partir d'une capture USBPcap pendant une mesure SCOUT réelle
+(2 étages), puis **validé en direct** avec `tools/mtp_live.py`
 sur Windows 11 (MTP6550 350-470, logiciel R33.020.9335, codeplug 9.30).
 
 ## Accès physique
@@ -10,7 +10,7 @@ sur Windows 11 (MTP6550 350-470, logiciel R33.020.9335, codeplug 9.30).
 - Sous Windows, le pilote Motorola expose deux ports COM :
   - **« Portable Tetra Radio Port 1 » (ex. COM5)** : interface utilisée par SCOUT → c'est celle-ci.
   - « Port 2 » (ex. COM6) : non utilisé par SCOUT. C'est l'**interface AT (PEI)** de la radio :
-    elle répond `\r\n+CME ERROR: 35\r\n` à chaque trame binaire de ce protocole (vérifié le 21/10/2026).
+    elle répond `\r\n+CME ERROR: 35\r\n` à chaque trame binaire de ce protocole (vérifié).
 - Le débit en bauds est sans effet (USB) ; 115200 fonctionne.
 - Un seul programme peut ouvrir le port à la fois (fermer SCOUT).
 
@@ -52,7 +52,7 @@ la réponse, elle, ne le répète pas) :
 | 0f | codeplug : 2 × 16 bits, le 2e affiché en hexa | `00 09 00 30` (9.30) |
 | 4c, b3 09 | inconnus | |
 
-Vérifié en direct le 21/10/2026 (pyserial, COM5) :
+Vérifié en direct (pyserial, COM5) :
 - les textes (série, modèle, versions) sont complétés par des `00` ;
 - `a 03` n'appelle aucune réponse ;
 - après `g 03`, une trame de type **`C`** (non décodée) précède les blocs `B` ;
@@ -105,11 +105,11 @@ Environ un bloc « cellule serveuse » par seconde.
 
 ## Incident observé : Port 1 muet après un câble arraché
 
-Le 21/10/2026, après un câble USB arraché pendant le flux (`g 03` actif) puis rebranché :
+Après un câble USB arraché pendant le flux (`g 03` actif) puis rebranché :
 Windows voit les deux ports (COM5 / COM6, état OK), COM5 s'ouvre, mais la radio ne renvoie
 **aucun octet** sur COM5, même à `a 03` / `e q`. COM6 (AT) répond toujours. Le service de trace
 de la radio reste bloqué : **éteindre puis rallumer la radio (câble branché) le débloque** (vérifié).
-**Reproduit** le même jour dans l'appli : câble arraché en plein flux → 20 essais de reconnexion
+**Reproduit** ensuite dans l'appli : câble arraché en plein flux → 20 essais de reconnexion
 sans réponse → redémarrage de la radio → connexion OK. Rebrancher le câble ne suffit donc pas.
 L'appli le détecte (port ouvert mais muet) et demande aussitôt de redémarrer la radio.
 Comportement connu : avec SCOUT aussi, il fallait redémarrer la radio **et** le programme.

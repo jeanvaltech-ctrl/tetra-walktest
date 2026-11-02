@@ -33,7 +33,7 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 5. Trace colorée en direct selon des seuils RSSI configurables (défaut = légende SCOUT :
    ≥-65 rouge, ≥-67 orange, ≥-85 jaune, ≥-87 vert, ≥-98 bleu, sinon noir/« No »).
    Seuils vérifiés sur un export SCOUT (couleur dessinée pour chaque RSSI du .atp) ; « ≥-72
-   orange » était une erreur (corrigée le 22/10/2026 après comparaison terrain avec SCOUT).
+   orange » était une erreur (corrigée après comparaison terrain avec SCOUT).
 6. Panneau live : LA, canal, RSSI, C1 + voisines (identifiées par LA).
 7. Export par étage : CSV (temps, étage, x, y, LA, canal, RSSI, C1, voisines) + PNG du plan avec trace.
 8. Sauvegarde du projet (fichier local) pour pouvoir reprendre.
@@ -41,8 +41,7 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 ## Fait depuis la V1
 
 Multi-étages, dossier projet (`plans/`, `exports/`), critère ASTRID en temps réel
-(> -88 dBm sur 95 % de la surface), interface FR / NL / EN. Première utilisation terrain :
-deux SSV chez un client (pharma) le 22/10/2026.
+(> -88 dBm sur 95 % de la surface), interface FR / NL / EN.
 
 ## Ensuite
 

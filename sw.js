@@ -4,7 +4,7 @@
 // Les requêtes réseau revalident le cache HTTP du navigateur (cache: 'no-cache') : sans ça,
 // juste après une mise à jour, un module récent pouvait côtoyer un module encore en cache
 // HTTP (GitHub Pages : 10 min) et l'appli refusait de démarrer.
-const VERSION = 'v12';
+const VERSION = 'v13';
 const CACHE = `tetra-walktest-${VERSION}`;
 const APP = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
