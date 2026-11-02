@@ -21,6 +21,7 @@ ISSI, TEI, SN, RADIO_ID = '7654321', '987654321098765', '123ABC4567', '4242'
 DATE, TIME = '15.06.2025', '14:37:12'
 LOC_DB = r'C:\Users\Technicien\Clients\Site\Locations.mdb'
 ALIAS_DB = r'D:\Mesures\Site\Alias.mdb'
+OTHER_PATH = r'\\serveur\SSV\Batiment'          # chemin sous une clé inconnue
 LA_SERVING, LA_NEIGH = 2571, 3333          # LA d'origine
 CH_SERVING, CH_NEIGH = 2748, 1234          # n° de canal d'origine (12 bits bas)
 KEPT = ['#Radio Type: MTP6550 350-470', '#Radio MN  : H65PCN6TZ6AN', '#Radio SW  : R33.020.9335', '#Radio CP  : 9.30']
@@ -60,6 +61,7 @@ ATP = '\r\n'.join([
     KEPT[1], KEPT[2], KEPT[3],
     f'#Loc_DB    : {LOC_DB}',
     f'#Alias_DB  : {ALIAS_DB}',
+    f'#Export_Dir: {OTHER_PATH}',
     '#UM,0,B,10.5,-20.25',
     f'{TIME}.100 {identity_frame().hex()}',
     f'{TIME}.200 {mac_burst().hex()}',
@@ -126,7 +128,7 @@ class AnonymizeAtpTest(unittest.TestCase):
         self.assertEqual(self.header['Time'], '00:00:00')
 
     def test_scout_paths_removed(self):
-        for s in ('Loc_DB', 'Alias_DB', 'Locations.mdb', 'Alias.mdb', 'Technicien', ':\\'):
+        for s in ('Loc_DB', 'Alias_DB', 'Export_Dir', 'Locations.mdb', 'Alias.mdb', 'Technicien', 'Batiment', '\\'):
             self.assertNotIn(s, self.out)
 
     def test_realistic_header_kept(self):

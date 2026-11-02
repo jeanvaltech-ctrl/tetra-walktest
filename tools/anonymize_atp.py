@@ -2,7 +2,10 @@
 """
 anonymize_atp.py — copie anonymisée d'un fichier SCOUT .atp, publiable comme jeu de test.
 
-- En-tête : identité de la radio (Radio Id, ISSI, TEI, n° de série) remplacée par des valeurs fictives.
+- En-tête : identité de la radio (Radio Id, ISSI, TEI, n° de série) remplacée par des valeurs fictives,
+  date et heure de la mesure remplacées par 01.01.2000 00:00:00, chemins des bases SCOUT (Loc_DB,
+  Alias_DB, et toute valeur qui ressemble à un chemin Windows) supprimés. Modèle, code produit,
+  version logicielle et codeplug sont gardés : en-tête réaliste pour tester les parseurs.
 - Blocs de mesure : LA et numéros de canal remplacés par des valeurs fictives, cohérentes dans tout
   le fichier (une même cellule garde le même identifiant fictif). Seuls les enregistrements connus
   (cellule serveuse + 4 voisines) sont conservés ; le bloc est reconstruit (checksum mis à 00).
@@ -13,6 +16,7 @@ anonymize_atp.py — copie anonymisée d'un fichier SCOUT .atp, publiable comme 
 Usage:
   python anonymize_atp.py source.atp destination.atp
 """
+import re
 import struct
 import sys
 
@@ -23,7 +27,10 @@ KEEP = {0x07, 0x08, 0x09, 0x0B, 0x10, 0x53,                 # serveuse
         0x27, 0x28, 0x29, 0x2B, 0x30,                       # voisine 2
         0x37, 0x38, 0x39, 0x3B, 0x40,                       # voisine 3
         0xA7, 0xA8, 0xA9, 0xAB, 0xA0}                       # voisine 4
-HEADER = {'Radio Id': '0', 'Radio ISSI': '1234567', 'Radio TEI': '000000000000000', 'Radio SN': '000TST0000'}
+HEADER = {'Radio Id': '0', 'Radio ISSI': '1234567', 'Radio TEI': '000000000000000', 'Radio SN': '000TST0000',
+          'Date': '01.01.2000', 'Time': '00:00:00'}
+DROP_HEADER = {'Loc_DB', 'Alias_DB'}
+WINDOWS_PATH = re.compile(r'[A-Za-z]:\\|\\\\')     # C:\…  ou  \\serveur\…
 LA_EMPTY = 65535
 
 
@@ -64,6 +71,8 @@ def main():
     for line in open(src, 'rb').read().decode('latin1').splitlines():
         if line.startswith('#') and not line.startswith('#UM,') and ':' in line:
             k, v = line[1:].split(':', 1)
+            if k.strip() in DROP_HEADER or WINDOWS_PATH.search(v):
+                continue
             if k.strip() in HEADER:
                 line = f"#{k}: {HEADER[k.strip()]}"
         elif line[:1].isdigit() and ' ' in line:
