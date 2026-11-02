@@ -275,7 +275,7 @@ async function sampleProject() {
   const blob = await c.convertToBlob({ type: 'image/png' });
   const floor = addFloor(project, { name: 'Étage -1', image: { blob, name: 'plan.png', type: 'image/png', width: 400, height: 300 } });
   setCalibration(floor, { x: 0, y: 0 }, { x: 100, y: 0 }, 10);    // 0,1 m/px
-  const t0 = new Date(2026, 9, 21, 10, 0, 0).getTime();
+  const t0 = new Date(2000, 0, 1, 10, 0, 0).getTime();
   const smp = (dt, x, y, rssi, extra = {}) => ({ la: 1001, channel: 100, rssi, c1: 10, n1_la: 1002, n1_channel: 101, n1_rssi: -90, n1_cx: 3,
     n2_la: '', n2_channel: '', n2_rssi: '', n2_cx: '', n3_la: '', n3_channel: '', n3_rssi: '', n3_cx: '', n4_la: '', n4_channel: '', n4_rssi: '', n4_cx: '',
     time: t0 + dt, ta: dt, x, y, leg: 1, ...extra });
@@ -299,7 +299,7 @@ await test('Export CSV : colonnes, tri, mètres, échappement', async () => {
   // une fois le nom échappé remplacé, chaque ligne se découpe simplement sur « ; »
   const rows = lines.slice(1).map(l => Object.fromEntries(l.replace('"Étage; -1"', 'E').split(';').map((v, i) => [CSV_COLUMNS[i], v])));
   const r = rows[0];
-  assert(r.date === '2026-10-21' && r.time === '10:00:01.000', `${r.date} ${r.time}`);
+  assert(r.date === '2000-01-01' && r.time === '10:00:01.000', `${r.date} ${r.time}`);
   assert(r.segment === '1' && r.x === '150.0' && r.x_m === '15.00' && r.y_m === '15.00', lines[1]);
   assert(r.rssi === '-60' && r.n1_la === '1002' && r.n2_la === '', lines[1]);
   assert(rows.map(x => x.segment).join(',') === '1,1,2' && rows[2].time === '10:00:05.000', 'tri par heure');
@@ -350,15 +350,15 @@ await test('Dossier projet : lecture des plans et du projet enregistré', async 
   const png = await (await sampleProject()).floor.image.blob;
   const file = name => ({ kind: 'file', name, getFile: async () => new File([png], name, { type: name.endsWith('.png') ? 'image/png' : 'image/jpeg' }) });
   const dir = (name, children) => ({ kind: 'directory', name, async *values() { yield* children; } });
-  const root = dir('SSV_Site_21-10-2026', [
+  const root = dir('SSV_Site_01-01-2000', [
     dir('Plans', [file('Floor 01.jpg'), file('Floor -1.png'), file('Floor 00.png'), file('notes.txt'), file('Floor 02.pdf')]),
-    file('SSV_Site_21-10-2026.walktest.json'), file('autre.walktest.json'),
+    file('SSV_Site_01-01-2000.walktest.json'), file('autre.walktest.json'),
   ]);
   const found = await readProjectFolder(root);
-  assert(found.name === 'SSV_Site_21-10-2026', found.name);
+  assert(found.name === 'SSV_Site_01-01-2000', found.name);
   assert(found.plans.map(p => p.name).join(',') === 'Floor -1.png,Floor 00.png,Floor 01.jpg', found.plans.map(p => p.name).join(','));
   assert(found.ignored.join(',') === 'notes.txt,Floor 02.pdf', 'ignorés : ' + found.ignored.join(','));
-  assert(found.projectFile && found.projectFile.name === 'SSV_Site_21-10-2026.walktest.json', 'fichier projet');
+  assert(found.projectFile && found.projectFile.name === 'SSV_Site_01-01-2000.walktest.json', 'fichier projet');
   const project = createProject({ name: 'x' });
   addFloor(project, { name: 'Sous-sol', image: { name: 'floor -1.PNG' } });   // déjà importé (casse différente)
   assert(newPlans(project, found.plans).map(p => p.name).join(',') === 'Floor 00.png,Floor 01.jpg', 'nouveaux plans');
