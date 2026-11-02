@@ -11,6 +11,9 @@ anonymize_atp.py — copie anonymisée d'un fichier SCOUT .atp, publiable comme 
   (cellule serveuse + 4 voisines) sont conservés ; le bloc est reconstruit (checksum mis à 00).
 - Autres trames supprimées (bursts MAC, réponses d'identité, trames C) : elles peuvent contenir
   des informations du réseau.
+- Heures des trames décalées : la première trame gardée est à 00:00:00.000, les écarts entre
+  trames sont conservés à la milliseconde près (passage à minuit compris), pour que la répartition
+  des mesures sur les segments reste identique.
 - Lignes #UM (positions sur le plan) conservées : elles n'ont pas de sens sans le plan.
 
 Usage:
@@ -32,6 +35,35 @@ HEADER = {'Radio Id': '0', 'Radio ISSI': '1234567', 'Radio TEI': '00000000000000
 DROP_HEADER = {'Loc_DB', 'Alias_DB'}
 WINDOWS_PATH = re.compile(r'[A-Za-z]:\\|\\\\')     # C:\…  ou  \\serveur\…
 LA_EMPTY = 65535
+
+
+DAY_MS = 24 * 3600 * 1000
+
+
+class Clock:
+    """Heures « hh:mm:ss.mmm » -> heures décalées, la première trame gardée à 00:00:00.000.
+
+    Toutes les trames (même supprimées) passent par absolute() : une heure plus petite que la
+    précédente signifie un passage à minuit, et on ajoute un jour.
+    """
+
+    def __init__(self):
+        self.prev, self.day, self.origin = None, 0, None
+
+    def absolute(self, t):
+        h, m, rest = t.split(':')
+        sec, _, frac = rest.partition('.')
+        v = ((int(h) * 60 + int(m)) * 60 + int(sec)) * 1000 + int((frac + '000')[:3])
+        if self.prev is not None and v < self.prev:
+            self.day += DAY_MS
+        self.prev = v
+        return v + self.day
+
+    def shifted(self, absolute_ms):
+        if self.origin is None:
+            self.origin = absolute_ms
+        d = absolute_ms - self.origin
+        return f'{d // 3600000:02d}:{d // 60000 % 60:02d}:{d // 1000 % 60:02d}.{d % 1000:03d}'
 
 
 class Mapper:
@@ -66,7 +98,7 @@ def anonymize_body(body, la, channel):
 
 def main():
     src, dst = sys.argv[1], sys.argv[2]
-    la, channel = Mapper(1001), Mapper(100)
+    la, channel, clock = Mapper(1001), Mapper(100), Clock()
     out, kept, dropped = [], 0, 0
     for line in open(src, 'rb').read().decode('latin1').splitlines():
         if line.startswith('#') and not line.startswith('#UM,') and ':' in line:
@@ -77,12 +109,13 @@ def main():
                 line = f"#{k}: {HEADER[k.strip()]}"
         elif line[:1].isdigit() and ' ' in line:
             t, h = line.split(' ', 1)
+            at = clock.absolute(t)
             body = anonymize_body(bytes.fromhex(h.strip()), la, channel)
             if body is None:
                 dropped += 1
                 continue
             kept += 1
-            line = f'{t} {body.hex()}'
+            line = f'{clock.shifted(at)} {body.hex()}'
         out.append(line)
     open(dst, 'wb').write(('\r\n'.join(out) + '\r\n').encode('latin1'))
     print(f'{dst} : {kept} trames gardées, {dropped} supprimées, '
