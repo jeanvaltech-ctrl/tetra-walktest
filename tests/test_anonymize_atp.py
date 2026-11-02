@@ -70,6 +70,32 @@ ATP = '\r\n'.join([
 ]) + '\r\n'
 
 
+def run_anonymizer(text):
+    """Anonymise `text` (contenu .atp) avec main() et retourne la sortie."""
+    import sys
+    with tempfile.TemporaryDirectory() as d:
+        src, dst = Path(d) / 'src.atp', Path(d) / 'dst.atp'
+        src.write_bytes(text.encode('latin1'))
+        argv = sys.argv
+        sys.argv = ['anonymize_atp.py', str(src), str(dst)]
+        try:
+            anonymize_atp.main()
+        finally:
+            sys.argv = argv
+        return dst.read_bytes().decode('latin1')
+
+
+def frame_times(text):
+    return [l.split(' ', 1)[0] for l in text.splitlines() if l[:1].isdigit() and ' ' in l]
+
+
+def ms(hhmmss):
+    """« hh:mm:ss.mmm » -> millisecondes (heures au-delà de 23 acceptées)."""
+    h, m, rest = hhmmss.split(':')
+    sec, milli = rest.split('.')
+    return ((int(h) * 60 + int(m)) * 60 + int(sec)) * 1000 + int(milli)
+
+
 def header_of(text):
     """En-tête « #Clé : valeur » -> {clé: valeur} (comme parse_atp)."""
     h = {}
@@ -98,18 +124,8 @@ def decoded_values(text, ids):
 class AnonymizeAtpTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with tempfile.TemporaryDirectory() as d:
-            src, dst = Path(d) / 'src.atp', Path(d) / 'dst.atp'
-            src.write_bytes(ATP.encode('latin1'))
-            import sys
-            argv = sys.argv
-            sys.argv = ['anonymize_atp.py', str(src), str(dst)]
-            try:
-                anonymize_atp.main()
-            finally:
-                sys.argv = argv
-            cls.out = dst.read_bytes().decode('latin1')
-            cls.header = header_of(cls.out)
+        cls.out = run_anonymizer(ATP)
+        cls.header = header_of(cls.out)
 
     def test_identity_replaced(self):
         for v in (ISSI, TEI, SN):
@@ -151,6 +167,46 @@ class AnonymizeAtpTest(unittest.TestCase):
     def test_positions_kept(self):
         self.assertIn('#UM,0,B,10.5,-20.25', self.out)
         self.assertIn('#UM,1,E,30.5,-40.75', self.out)
+
+
+# Heures d'origine connues, avec passage à minuit (une trame à supprimer au milieu).
+TIMES = ['23:59:58.250', '23:59:58.900', '23:59:59.999', '00:00:00.001', '00:00:03.500', '00:01:00.000']
+DROPPED = 2                       # index de la trame remplacée par un burst MAC (supprimée)
+
+
+class FrameTimesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        lines = ['#Time      : 23:59:58', '#Date      : 31.12.2025']
+        for i, t in enumerate(TIMES):
+            body = mac_burst() if i == DROPPED else measure_frame(0x20 + i)
+            lines += [f'#UM,{i},I,{i}.0,{i}.0', f'{t} {body.hex()}']
+        cls.out = run_anonymizer('\r\n'.join(lines) + '\r\n')
+        cls.times = frame_times(cls.out)
+
+    def test_first_frame_at_midnight(self):
+        self.assertEqual(self.times[0], '00:00:00.000')
+
+    def test_original_times_gone(self):
+        for i, t in enumerate(TIMES):
+            if i:
+                self.assertNotIn(t, self.out)
+        self.assertNotIn('23:59', self.out)
+
+    def test_gaps_kept_across_midnight(self):
+        kept = [t for i, t in enumerate(TIMES) if i != DROPPED]
+        self.assertEqual(len(self.times), len(kept))
+        day = 24 * 3600 * 1000
+        src = [ms(t) for t in kept]
+        for i in range(1, len(src)):
+            if src[i] < src[i - 1]:
+                src[i:] = [v + day for v in src[i:]]
+        self.assertEqual([ms(t) - ms(self.times[0]) for t in self.times], [v - src[0] for v in src])
+        self.assertEqual(self.times, ['00:00:00.000', '00:00:00.650', '00:00:01.751', '00:00:05.250', '00:01:01.750'])
+
+    def test_format_kept(self):
+        for t in self.times:
+            self.assertRegex(t, r'^\d{2}:\d{2}:\d{2}\.\d{3}$')
 
 
 if __name__ == '__main__':
