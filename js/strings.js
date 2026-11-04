@@ -47,6 +47,11 @@ export const STRINGS = {
   'status.reconnectedResume': { fr: 'Radio reconnectée : cliquez « Reprendre » une fois à votre position', nl: 'Radio opnieuw verbonden: klik op „Hervatten" zodra u op uw positie bent', en: 'Radio reconnected: click "Resume" once you are at your position' },
   'status.reconnected': { fr: 'Radio reconnectée', nl: 'Radio opnieuw verbonden', en: 'Radio reconnected' },
   'status.reconnectGaveUp': { fr: 'Reconnexion automatique abandonnée : cliquez « Connecter la radio… »', nl: 'Automatisch opnieuw verbinden gestopt: klik op „Radio verbinden…"', en: 'Automatic reconnection stopped: click "Connect radio…"' },
+  'notify.frozen': {
+    fr: 'L\'ordinateur a été en veille ou figé : mesure mise en pause au dernier contrôle. Reprendre au dernier point cliqué.',
+    nl: 'De computer stond in slaapstand of was vastgelopen: meting gepauzeerd bij de laatste controle. Hervat bij het laatst aangeklikte punt.',
+    en: 'The computer was asleep or frozen: measurement paused at the last check. Resume from the last clicked point.',
+  },
   'status.radioPaused': { fr: 'Radio déconnectée : mesure en pause', nl: 'Radio niet verbonden: meting gepauzeerd', en: 'Radio disconnected: measurement paused' },
   'status.unplugged': { fr: 'Radio débranchée', nl: 'Radio losgekoppeld', en: 'Radio unplugged' },
   'status.unpluggedAuto': { fr: 'Radio débranchée : rebranchez-la, la reconnexion est automatique', nl: 'Radio losgekoppeld: sluit hem opnieuw aan, de verbinding wordt automatisch hersteld', en: 'Radio unplugged: plug it back in, it will reconnect automatically' },
@@ -100,7 +105,8 @@ export const STRINGS = {
   'stats.notCalibrated': { fr: 'px (non calibré)', nl: 'px (niet gekalibreerd)', en: 'px (not calibrated)' },
   'stats.astrid': { fr: 'ASTRID', nl: 'ASTRID', en: 'ASTRID' },
   'stats.noMeasure': { fr: 'pas encore de mesure', nl: 'nog geen metingen', en: 'no measurements yet' },
-  'stats.goal': { fr: '(objectif {goal} % ; {points} des points)', nl: '(doel {goal} %; {points} van de punten)', en: '(target {goal} %; {points} of points)' },
+  'stats.goal': { fr: '(% de la distance parcourue ; objectif {goal} % ; {points} des points)', nl: '(% van de afgelegde weg; doel {goal} %; {points} van de punten)', en: '(% of the distance walked; target {goal} %; {points} of points)' },
+  'stats.noService': { fr: 'dont {n} sans service', nl: 'waarvan {n} zonder service', en: '{n} without service' },
   'map.pending': {
     fr: p => `${p.n} ${pl(p.n, 'mesure', 'mesures')} en attente`,
     nl: p => `${p.n} ${pln(p.n, 'meting', 'metingen')} in afwachting`,
@@ -143,9 +149,9 @@ export const STRINGS = {
   'btn.add': { fr: 'Ajouter', nl: 'Toevoegen', en: 'Add' },
   'btn.cancel': { fr: 'Annuler', nl: 'Annuleren', en: 'Cancel' },
   'floor.count': {
-    fr: p => (p.n ? `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}` : 'aucune mesure'),
-    nl: p => (p.n ? `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}` : 'geen metingen'),
-    en: p => (p.n ? `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}` : 'no measurements'),
+    fr: p => (p.ns ? `${p.f(p.n)} points dont ${p.f(p.ns)} sans service` : p.n ? `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}` : 'aucune mesure'),
+    nl: p => (p.ns ? `${p.f(p.n)} punten waarvan ${p.f(p.ns)} zonder service` : p.n ? `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}` : 'geen metingen'),
+    en: p => (p.ns ? `${p.f(p.n)} points, ${p.f(p.ns)} without service` : p.n ? `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}` : 'no measurements'),
   },
   'floor.position': { fr: 'Étage {i} sur {n}', nl: 'Verdieping {i} van {n}', en: 'Floor {i} of {n}' },
   'floor.measuring': { fr: '● en mesure', nl: '● meting bezig', en: '● measuring' },
@@ -317,9 +323,9 @@ export const STRINGS = {
 
   // ---------- bandeau du PNG exporté ----------
   'caption.measures': {
-    fr: p => `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}`,
-    nl: p => `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`,
-    en: p => `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}`,
+    fr: p => (p.ns ? `${p.f(p.n)} points dont ${p.f(p.ns)} sans service` : `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}`),
+    nl: p => (p.ns ? `${p.f(p.n)} punten waarvan ${p.f(p.ns)} zonder service` : `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`),
+    en: p => (p.ns ? `${p.f(p.n)} points, ${p.f(p.ns)} without service` : `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}`),
   },
   'caption.noService': { fr: 'pas de service : {pct}', nl: 'geen service: {pct}', en: 'no service: {pct}' },
   'caption.below': { fr: '< {rssi} dBm : {pct}', nl: '< {rssi} dBm: {pct}', en: '< {rssi} dBm: {pct}' },

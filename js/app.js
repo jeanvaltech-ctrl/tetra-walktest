@@ -6,7 +6,7 @@ import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
 import { rssiColor, textOn, DEFAULT_THRESHOLDS, NO_COVERAGE, upgradeThresholds } from './thresholds.js';
-import { Session, floorStats, NO_SERVICE_MS, noServiceCause } from './session.js';
+import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
@@ -265,7 +265,7 @@ function renderFloors() {
   $('sec-floors').hidden = !p;
   if (!p) return;
   const measuring = state.session && state.session.state !== 'idle';
-  const count = f => t('floor.count', { n: floorSampleCount(f) });
+  const count = f => t('floor.count', { n: floorSampleCount(f), ns: floorStats(f).noService });
   const sel = $('floor-select');
   // libellé court (la barre latérale est étroite) : nom, nombre de mesures entre parenthèses
   sel.innerHTML = p.floors.map(f => {
@@ -841,7 +841,7 @@ function renderMeasure() {
     : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} &gt; ${c.rssi} dBm `
       + `<span class="muted">${t('stats.goal', { goal: c.percent, points: fmtPct(r.pctSamples) })}</span></dd>`;
   $('measure-stats').innerHTML =
-    `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
+    `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${s.noService ? ` <span class="ko">${t('stats.noService', { n: nf(s.noService) })}</span>` : ''}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
     `<dt>${t('stats.segments')}</dt><dd>${s.segments}</dd><dt>${t('stats.route')}</dt><dd>${length}</dd>` +
     `<dt>${t('stats.astrid')}</dt>${astrid}`;
 }
@@ -1007,7 +1007,7 @@ radio.addEventListener('state', e => {
   if (message) showRadioError(message);
   if (s === 'streaming') { streamingSince = Date.now(); resetLive(); }
   // radio perdue en pleine mesure : pause automatique (rien n'est perdu de ce qui est placé)
-  if (s === 'disconnected' && state.session && state.session.pause()) setStatus(t('status.radioPaused'));
+  if (s === 'disconnected' && state.session && state.session.pause(pauseTime())) setStatus(t('status.radioPaused'));
   renderMeasure();
 });
 
@@ -1024,6 +1024,7 @@ radio.addEventListener('lost', () => {
 
 // trames brutes conservées pendant la mesure (pour pouvoir tout recalculer plus tard)
 radio.addEventListener('frame', e => {
+  if (state.session) state.session.noteFrame(e.detail.time.getTime());
   if (state.session && state.session.state !== 'idle') state.floor.raw.push([e.detail.time.getTime(), toHex(e.detail.body)]);
 });
 
@@ -1104,8 +1105,19 @@ function updateAge() {
     notify(t('live.silent'), 'ko', 10000);
   }
 }
+let lastTick = Date.now();   // dernier contrôle de chaque seconde (sert à repérer une veille)
+
+/** Instant de la pause : au dernier contrôle si l'ordinateur sortait de veille (le temps de veille compte comme pause). */
+const pauseTime = (now = Date.now()) => (isFreeze(lastTick, now, radio.lastFrameAt) ? lastTick : now);
+
 setInterval(() => {
   const now = Date.now();
+  // réveil après une veille (aucune trame pendant le saut d'horloge) : pause, sans point « pas de service »
+  if (state.session && state.session.state === 'walking' && isFreeze(lastTick, now, radio.lastFrameAt)) {
+    state.session.pause(lastTick);
+    notify(t('notify.frozen'), 'ko', 15000);
+  }
+  lastTick = now;
   // ajoute les points manquants ; l'événement 'change' de la session redessine et sauvegarde
   if (state.session) state.session.checkService(now, noServiceCause(radio.lastFrameAt, now));
   updateAge();

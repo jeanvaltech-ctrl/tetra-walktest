@@ -21,6 +21,10 @@ const EMPTY_MEASURE = Object.fromEntries(['la', 'channel', 'rssi', 'c1',
   ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`])].map(k => [k, '']));
 
 /** 'noserving' : la radio envoie des trames, mais sans cellule serveuse ; 'silent' : plus aucune trame. */
+/** Au-delà de ce retard du contrôle de chaque seconde, sans aucune trame : l'ordinateur était en veille. */
+export const FREEZE_MS = 10000;
+export const isFreeze = (lastTick, now, lastFrameAt) => now - lastTick > FREEZE_MS && !(lastFrameAt > lastTick);
+
 export const noServiceCause = (lastFrameAt, now) =>
   lastFrameAt && now - lastFrameAt < NO_SERVICE_MS ? 'noserving' : 'silent';
 
@@ -37,6 +41,27 @@ export class Session extends EventTarget {
     this.validTa = 0;         // temps actif de la dernière mesure valide (ou du clic de départ)
     this.gapTa = 0;           // … du dernier point déjà couvert (mesure valide ou « pas de service »)
     this.cause = 'silent';    // dernière cause connue, pour les vérifications faites par la session
+    this.lastFrameAt = 0;     // horodatage de la dernière trame radio (quelle qu'elle soit)
+    this.silences = [];       // [début, fin] des silences radio d'au moins NO_SERVICE_MS
+  }
+
+  /**
+   * Trame radio reçue (horodatage de réception). La cause de chaque point « pas de service »
+   * se déduit de ces horodatages, pas du moment où le contrôle passe (minuteur freiné en arrière-plan).
+   */
+  noteFrame(time) {
+    if (this.lastFrameAt && time - this.lastFrameAt >= NO_SERVICE_MS) {
+      this.silences.push([this.lastFrameAt, time]);
+      if (this.silences.length > 200) this.silences.shift();
+    }
+    if (time > this.lastFrameAt) this.lastFrameAt = time;
+  }
+
+  /** Cause d'après les trames notées : 'silent' si aucune trame depuis NO_SERVICE_MS à cet instant. */
+  causeAt(time, fallback) {
+    if (!this.lastFrameAt) return fallback;
+    if (time - this.lastFrameAt >= NO_SERVICE_MS) return 'silent';
+    return this.silences.some(([a, b]) => time - a >= NO_SERVICE_MS && time < b) ? 'silent' : 'noserving';
   }
 
   changed() { this.dispatchEvent(new Event('change')); }
@@ -52,6 +77,8 @@ export class Session extends EventTarget {
   /** Enregistre une mesure ; ignorée hors segment ouvert ou en pause. */
   addSample(snapshot, time = this.now()) {
     if (this.state !== 'walking') return false;
+    // un trou vu en retard (contrôle freiné quand la fenêtre est réduite) est couvert avant la mesure
+    this.checkService(time - 1, this.cause);
     const ta = this.active(time);
     this.pending.push({ ...snapshot, time, ta });
     this.validTa = this.gapTa = ta;
@@ -73,7 +100,8 @@ export class Session extends EventTarget {
     if (taNow - this.validTa < NO_SERVICE_MS) return 0;
     let added = 0;
     for (let ta = this.gapTa + NO_SERVICE_STEP_MS; ta <= taNow; ta += NO_SERVICE_STEP_MS) {
-      this.addNoService({ ...EMPTY_MEASURE, noService: cause, time: now - (taNow - ta), ta });
+      const time = now - (taNow - ta);
+      this.addNoService({ ...EMPTY_MEASURE, noService: this.causeAt(time, cause), time, ta });
       this.gapTa = ta;
       added++;
     }
@@ -120,11 +148,12 @@ export class Session extends EventTarget {
     return true;
   }
 
-  pause() {
+  /** Pause ; `at` antérieur à maintenant (réveil après une veille) : le temps depuis `at` compte comme pause. */
+  pause(at = this.now()) {
     if (this.state !== 'walking') return false;
-    this.checkService(this.now(), this.cause);
+    this.checkService(at, this.cause);
     this.state = 'paused';
-    this.pauseStart = this.now();
+    this.pauseStart = at;
     this.changed();
     return true;
   }
@@ -251,10 +280,11 @@ export function placeSamples(samples, a, b, leg) {
 
 /** Statistiques d'un étage : points de mesure, segments, longueur parcourue (px image). */
 export function floorStats(floor) {
-  let samples = 0, length = 0;
+  let samples = 0, noService = 0, length = 0;
   for (const seg of floor.segments) {
     samples += seg.samples.length;
+    noService += seg.samples.filter(s => s.noService).length;
     for (let i = 1; i < seg.points.length; i++) length += dist(seg.points[i - 1], seg.points[i]);
   }
-  return { samples, segments: floor.segments.length, length };
+  return { samples, noService, segments: floor.segments.length, length };
 }

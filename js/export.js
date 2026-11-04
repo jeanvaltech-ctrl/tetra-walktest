@@ -66,7 +66,7 @@ export function caption(project, floor) {
   const th = project.thresholds || DEFAULT_THRESHOLDS, sh = floorShares(floor, th);
   const shares = sh.noService === null ? [] : [t('caption.noService', { pct: fmtPct(sh.noService) }),
     t('caption.below', { rssi: th[th.length - 1].min, pct: fmtPct(sh.below) })];
-  return [parts, when, t('caption.measures', { n: samples.length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
+  return [parts, when, t('caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
 }
 
 /** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau. */
