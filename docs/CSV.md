@@ -10,22 +10,24 @@ doit respecter ce document. Code : `js/export.js` (colonnes, fichiers), `js/crit
 | `<projet> - <étage>.csv` | les mesures d'un étage, triées par heure |
 | `<projet> - all floors.csv` | toutes les mesures du projet, triées par heure (« Exporter tous les étages… ») |
 
-Le nom du fichier commun suit la **langue des exports** :
+Les noms de fichiers ne dépendent d'aucune langue : le fichier commun s'appelle toujours
+`<projet> - all floors.csv`, quelles que soient la langue de l'interface et celle des exports (celle-ci
+ne change que le contenu du PNG : légende, bandeau, échelle).
 
-| Langue | Nom du fichier commun |
-|---|---|
-| EN (défaut) | `<projet> - all floors.csv` |
-| FR | `<projet> - tous les étages.csv` |
-| NL | `<projet> - alle verdiepingen.csv` |
+Des exports plus anciens peuvent s'appeler `<projet> - tous les étages.csv` ou
+`<projet> - alle verdiepingen.csv`. Le lecteur doit reconnaître ces **trois** suffixes et **ne pas
+prendre le fichier commun pour un étage** : ses lignes sont déjà dans les fichiers par étage, le compter
+en plus doublerait les mesures. CRG reconnaît les trois. L'étage d'une ligne se lit dans la colonne
+`floor`, pas dans le nom du fichier.
 
-Le lecteur doit reconnaître ces **trois** suffixes et **ne pas prendre le fichier commun pour un
-étage** : ses lignes sont déjà dans les fichiers par étage, le compter en plus doublerait les mesures.
-L'étage d'une ligne se lit dans la colonne `floor`, pas dans le nom du fichier.
+Walk-Test ne supprime jamais de fichier. Après un export de tous les étages dans le dossier `exports/`
+du projet, un autre fichier commun présent dans ce dossier (ancien nom, autre projet) est signalé par
+un avertissement, pour ne pas l'envoyer avec le rapport.
 
 Les caractères interdits sous Windows (`\ / : * ? " < > |`) sont remplacés par `_` dans les noms.
 
-Seul le nom du fichier commun dépend de la langue : **le contenu d'un CSV (en-têtes, valeurs) ne change
-jamais**, quelles que soient la langue de l'interface et celle des exports.
+**Le contenu d'un CSV (en-têtes, valeurs) ne change jamais**, quelles que soient la langue de
+l'interface et celle des exports.
 
 ## Format
 
@@ -69,6 +71,8 @@ un niveau trop faible. Un RSSI vide n'est pas une valeur nulle : ne jamais le li
 si l'utilisateur l'a modifié.
 
 ## Pourcentages et verdict
+
+Règle validée par Jean le 04/11/2026.
 
 Base : les **points** du CSV (`total` = nombre de lignes, `ok` = lignes avec `astrid_ok` = 1).
 

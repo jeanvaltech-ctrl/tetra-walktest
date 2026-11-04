@@ -38,8 +38,9 @@ sans couverture (~10 s toutes les ~40 s) : `?demo=noservice` (trames sans cellul
 la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
 
 **Langue des exports** : réglage à part (FR / NL / EN, à côté des boutons d'export, **anglais par
-défaut**, mémorisé sur le poste) pour ce qui est écrit dans le PNG (légende, bandeau, échelle) et pour
-le nom du CSV commun. L'écran garde la langue de l'interface ; le contenu des CSV ne change jamais.
+défaut**, mémorisé sur le poste) pour ce qui est écrit dans le PNG (légende, bandeau, échelle). L'écran
+garde la langue de l'interface ; le contenu des CSV ne change jamais et les noms de fichiers restent
+en anglais.
 
 ### Mesurer
 
@@ -125,7 +126,10 @@ la convention ASTRID donne -98 dBm pour une mesure radio portée.
   parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -98 dBm : z % »
   des points, ISSI de la radio), dans la langue des exports.
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
-  un CSV commun trié par heure, nommé selon la langue des exports (`<projet> - all floors.csv` par défaut).
+  un CSV commun trié par heure, toujours nommé `<projet> - all floors.csv`, quelle que soit la langue
+  (CRG reconnaît aussi les anciens noms `tous les étages` et `alle verdiepingen`). Aucun fichier n'est
+  jamais supprimé : si `exports/` contient un autre CSV commun, l'appli affiche un avertissement avec
+  son nom, pour ne pas l'envoyer avec le rapport.
 
 ### Incidents
 
