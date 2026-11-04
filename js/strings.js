@@ -63,6 +63,8 @@ export const STRINGS = {
   'age.first': { fr: 'En attente de la première mesure…', nl: 'Wachten op de eerste meting…', en: 'Waiting for the first measurement…' },
   'age.stale': { fr: '⚠ Aucune mesure depuis {s} s', nl: '⚠ Geen meting sinds {s} s', en: '⚠ No measurement for {s} s' },
   'age.last': { fr: 'Dernière mesure il y a {s} s', nl: 'Laatste meting {s} s geleden', en: 'Last measurement {s} s ago' },
+  'live.noService': { fr: '✘ Pas de service : NON conforme ASTRID', nl: '✘ Geen service: voldoet NIET aan ASTRID', en: '✘ No service: NOT ASTRID compliant' },
+  'live.silent': { fr: 'Aucune trame reçue : vérifier la radio', nl: 'Geen frames ontvangen: controleer de radio', en: 'No frames received: check the radio' },
 
   // ---------- mesure ----------
   'sec.measure': { fr: 'Mesure', nl: 'Meting', en: 'Measurement' },
@@ -108,9 +110,9 @@ export const STRINGS = {
   'action.resume': { fr: 'Reprendre la mesure', nl: 'De meting hervatten', en: 'Resume the measurement' },
   'action.placePoint': { fr: 'Placer le point', nl: 'Het punt plaatsen', en: 'Place the point' },
   'confirm.noRadio': {
-    fr: 'La radio n\'est pas connectée : aucune mesure ne sera enregistrée.\n\n{action} quand même ?',
-    nl: 'De radio is niet verbonden: er worden geen metingen opgeslagen.\n\n{action} toch doen?',
-    en: 'The radio is not connected: no measurements will be recorded.\n\n{action} anyway?',
+    fr: 'La radio n\'est pas connectée : aucune mesure ne sera enregistrée et le trajet comptera comme « pas de service ».\n\n{action} quand même ?',
+    nl: 'De radio is niet verbonden: er worden geen metingen opgeslagen en het traject telt als „geen service".\n\n{action} toch doen?',
+    en: 'The radio is not connected: no measurements will be recorded and the route will count as "no service".\n\n{action} anyway?',
   },
   'confirm.loss': {
     fr: p => `${p.n} mesures reçues depuis le dernier clic seront perdues.\n\nAnnulez puis cliquez d'abord votre position actuelle sur le plan pour les garder.\n\nContinuer quand même ?`,
@@ -307,10 +309,11 @@ export const STRINGS = {
   'aria.critPct': { fr: 'Pourcentage exigé', nl: 'Vereist percentage', en: 'Required percentage' },
   'btn.resetAstrid': { fr: 'Rétablir ASTRID (> -88 dBm, 95 %)', nl: 'ASTRID herstellen (> -88 dBm, 95 %)', en: 'Restore ASTRID (> -88 dBm, 95 %)' },
   'compliance.text': {
-    fr: p => `ASTRID : ${p.pct} > ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %)`,
-    nl: p => `ASTRID: ${p.pct} > ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %)`,
-    en: p => `ASTRID: ${p.pct} > ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %)`,
+    fr: p => `ASTRID : ${p.pct} de la distance parcourue > ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %)`,
+    nl: p => `ASTRID: ${p.pct} van de afgelegde weg > ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %)`,
+    en: p => `ASTRID: ${p.pct} of the distance walked > ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %)`,
   },
+  'legend.noService': { fr: 'Pas de service', nl: 'Geen service', en: 'No service' },
 
   // ---------- bandeau du PNG exporté ----------
   'caption.measures': {
@@ -318,5 +321,7 @@ export const STRINGS = {
     nl: p => `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`,
     en: p => `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}`,
   },
+  'caption.noService': { fr: 'pas de service : {pct}', nl: 'geen service: {pct}', en: 'no service: {pct}' },
+  'caption.below': { fr: '< {rssi} dBm : {pct}', nl: '< {rssi} dBm: {pct}', en: '< {rssi} dBm: {pct}' },
   'caption.radio': { fr: 'radio ISSI {issi}', nl: 'radio ISSI {issi}', en: 'radio ISSI {issi}' },
 };
