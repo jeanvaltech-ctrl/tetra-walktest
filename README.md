@@ -104,8 +104,7 @@ comptent comme des points non conformes. L'appli l'évalue en direct :
   de trajet qu'elle couvre) est affiché à titre d'information. Les pourcentages sont arrondis vers
   le bas, le verdict porte sur les comptes exacts ([règle](docs/CSV.md#pourcentages-et-verdict)) ;
 - **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict en % des points,
-  % de la distance en information, parts des points non conformes, sans service et sous le dernier
-  seuil dans le bandeau du PNG.
+  part des points sans service et % de la distance en information dans le bandeau du PNG.
 
 Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ». Question ouverte, non
 tranchée : -88 dBm s'applique ici radio portée (perte corporelle incluse), alors que l'Annexe 6 de
@@ -134,9 +133,8 @@ n'existent plus que dans les projets qui les ont déjà enregistrées.
   `no_service` = 1 : point « pas de service », cellules de mesure vides et `astrid_ok` à 0).
   Contrat complet, lu par CRG : [`docs/CSV.md`](docs/CSV.md).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
-  (projet, étage, horaire, nombre de points, verdict ASTRID en % des points avec la distance
-  parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -88 dBm : z % »
-  des points, ce dernier suivant le dernier seuil du projet, ISSI de la radio), dans la langue des exports.
+  (projet, étage, horaire, nombre de points, verdict ASTRID en % des points, part « pas de service »,
+  distance parcourue en information, ISSI de la radio), dans la langue des exports.
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
   un CSV commun trié par heure, toujours nommé `<projet> - all floors.csv`, quelle que soit la langue
   (CRG reconnaît aussi les anciens noms `tous les étages` et `alle verdiepingen`). Aucun fichier n'est

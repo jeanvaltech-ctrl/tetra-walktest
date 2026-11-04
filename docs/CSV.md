@@ -100,11 +100,11 @@ Base : les **points** du CSV (`total` = nombre de lignes, `ok` = lignes avec `as
 1. **Verdict** sur les comptes exacts, jamais sur un pourcentage arrondi : conforme si
    `ok * 100 >= 95 * total`.
 2. **Part conforme** : `ok / total`, **tronquée** à 1 décimale.
-3. **Part non conforme** : `100 - part conforme affichée`, pour que les deux parts affichées fassent
-   toujours 100,0 %.
-4. **Autres parts** (pas de service, sous le dernier seuil) : tronquées à 1 décimale.
+3. **Part « pas de service »** : tronquée à 1 décimale.
+4. **Part non conforme** : `100 - part conforme affichée`, pour que les deux parts affichées fassent
+   toujours 100,0 %. Walk-Test ne l'affiche pas ; la règle vaut pour un lecteur qui l'affiche.
 
-| `ok` / `total` | Part exacte | Conforme | Non conforme | Verdict |
+| `ok` / `total` | Part exacte | Conforme | Non conforme (règle 4) | Verdict |
 |---|---|---|---|---|
 | 59 / 297 | 19,865… % | 19,8 % | 80,2 % | NON conforme |
 | 9496 / 10000 | 94,96 % | 94,9 % | 5,1 % | NON conforme (arrondi, il s'afficherait à tort 95,0 %) |
@@ -112,8 +112,6 @@ Base : les **points** du CSV (`total` = nombre de lignes, `ok` = lignes avec `as
 
 Même règle dans Walk-Test (panneaux, bandeau du PNG) et dans CRG 2.6.3.
 
-Le bandeau du PNG donne aussi « < dernier seuil » : les points **mesurés** sous le dernier seuil, sans
-les points « pas de service ». Avec les seuils et le critère par défaut, ce sont les points non conformes
-qui ont un RSSI. Tronquée (règle 4), cette part peut afficher 0,1 ou 0,2 de moins que `non conforme -
-pas de service` : pour 59 / 297 sans point « pas de service », `non conforme : 80,2 %` et
-`< -88 dBm : 80,1 %` (238 / 297 = 80,13… %).
+Le bandeau du PNG donne la part conforme et le verdict, la part « pas de service » et la distance
+parcourue (décision de Jean du 04/11/2026), par exemple :
+`ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · pas de service : 49,4 % · distance parcourue : 19,7 %`.
