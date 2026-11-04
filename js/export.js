@@ -2,7 +2,8 @@
 import { ViewTransform } from './geometry.js';
 import { NEIGH } from './protocol.js';
 import { FONT, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
-import { tx, getLang, getExportLang, fmtDate, fmtTime } from './i18n.js';
+import { t, tx, getLang, getExportLang, fmtDate, fmtTime } from './i18n.js';
+import { otherCombinedCsvs } from './folder.js';
 import { DEFAULT_CRITERION, sampleOk, complianceText, floorCompliance, floorShares, fmtPct, fmtNokPct } from './criterion.js';
 import { DEFAULT_THRESHOLDS } from './thresholds.js';
 
@@ -57,6 +58,12 @@ export const projectCsv = project =>
 
 /** Nom du CSV de tous les étages : toujours en anglais, comme tous les noms de fichiers. */
 export const combinedCsvName = projectName => `${projectName} - all floors.csv`;
+
+/** Message (langue de l'interface) si exports/ contient un autre CSV commun que celui du projet, sinon ''. */
+export async function otherCombinedWarning(dir, projectName) {
+  const names = await otherCombinedCsvs(dir, fileSafe(combinedCsvName(projectName)));
+  return names.length ? t('notify.otherCombined', { names: names.join(', ') }) : '';
+}
 
 /** Texte du bandeau sous le plan exporté, dans la langue demandée (floorPng : la langue des exports). */
 export function caption(project, floor, lang = getLang()) {

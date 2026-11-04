@@ -102,6 +102,7 @@ select { font: inherit; color: var(--fg); background: var(--input); border: 1px 
 }
 .toast.ko { background: #b3261e; }
 .toast.busy { background: #2b3440; }
+.toast.warn { background: #8a5a00; }
 details > summary {
   cursor: pointer; font-size: 13px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted);

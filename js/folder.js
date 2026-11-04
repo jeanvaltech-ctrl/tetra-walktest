@@ -9,6 +9,7 @@ export const PLANS_DIR = 'plans';
 export const EXPORTS_DIR = 'exports';
 const IMAGE = /\.(png|jpe?g)$/i;
 const PROJECT = /\.walktest\.json$/i;
+const COMBINED_CSV = /- (all floors|tous les étages|alle verdiepingen)\.csv$/;
 
 /** « Floor -1.png » -> « Floor -1 ». */
 export const floorNameFromFile = name => name.replace(/\.[^.]+$/, '').trim();
@@ -49,6 +50,19 @@ export async function readProjectFolder(dir) {
   const saved = root.filter(h => h.kind === 'file' && PROJECT.test(h.name));
   const projectFile = saved.find(h => h.name.toLowerCase() === `${dir.name}.walktest.json`.toLowerCase()) || saved[0] || null;
   return { name: dir.name, plans, ignored, projectFile };
+}
+
+/**
+ * CSV communs du dossier (nom actuel en anglais, anciens noms français et néerlandais) autres que `name`,
+ * triés ; aucun si le dossier ne peut pas être lu. Lecture seule : on ne supprime jamais de fichier.
+ */
+export async function otherCombinedCsvs(dir, name) {
+  const norm = s => s.normalize('NFC').toLowerCase();   // Windows ne distingue pas la casse
+  try {
+    return (await entries(dir))
+      .filter(h => h.kind === 'file' && COMBINED_CSV.test(norm(h.name)) && norm(h.name) !== norm(name))
+      .map(h => h.name).sort();
+  } catch { return []; }
 }
 
 /** Plans du dossier qui ne sont pas encore des étages du projet (comparés par nom de fichier). */

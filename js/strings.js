@@ -260,6 +260,11 @@ export const STRINGS = {
     nl: p => `${p.n} bestanden geëxporteerd${p.where ? ` naar „${p.where}"` : ' (downloads)'}`,
     en: p => `${p.n} files exported${p.where ? ` to "${p.where}"` : ' (downloads)'}`,
   },
+  'notify.otherCombined': {
+    fr: 'Un autre fichier « tous les étages » existe déjà dans exports/ : {names}. CRG l\'ignore, mais pensez à ne pas l\'envoyer avec le rapport.',
+    nl: 'Er staat al een ander bestand „alle verdiepingen" in exports/: {names}. CRG negeert het, maar stuur het niet mee met het rapport.',
+    en: 'Another "all floors" file already exists in exports/: {names}. CRG ignores it, but remember not to send it with the report.',
+  },
   'err.noFolderApi': { fr: 'Ouverture de dossier indisponible dans ce navigateur : utilisez Edge ou Chrome.', nl: 'Een map openen kan niet in deze browser: gebruik Edge of Chrome.', en: 'Opening a folder is not available in this browser: use Edge or Chrome.' },
   'status.readingFolder': { fr: 'Lecture du dossier « {name} »…', nl: 'Map „{name}" lezen…', en: 'Reading folder "{name}"…' },
   'err.noPlans': { fr: 'Aucun plan PNG ou JPG dans « {path} ».', nl: 'Geen PNG- of JPG-plan in „{path}".', en: 'No PNG or JPG plan in "{path}".' },

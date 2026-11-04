@@ -1,7 +1,7 @@
 // app.js — point d'entrée de l'interface.
 import { PlanView } from './planview.js';
 import { createProject, addFloor, removeFloor, floorSampleCount, setCalibration, clearCalibration, serializeProject, deserializeProject } from './project.js';
-import { floorCsv, projectCsv, floorPng, fileSafe, combinedCsvName } from './export.js';
+import { floorCsv, projectCsv, floorPng, fileSafe, combinedCsvName, otherCombinedWarning } from './export.js';
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
@@ -86,7 +86,7 @@ function setStatus(text) { $('status').textContent = text; }
 let toastTimer = 0;
 function notify(text, kind = 'ok', ms = 5000) {
   const t = $('toast');
-  t.textContent = (kind === 'ok' ? '✔ ' : kind === 'ko' ? '✘ ' : '') + text;
+  t.textContent = (kind === 'ok' ? '✔ ' : kind === 'ko' ? '✘ ' : kind === 'warn' ? '⚠ ' : '') + text;
   t.className = `toast ${kind}`;
   t.hidden = false;
   clearTimeout(toastTimer);
@@ -520,7 +520,8 @@ $('btn-export-png').addEventListener('click', () => runFileAction(async () => {
 // dans « exports » du dossier projet, sinon dans un dossier choisi
 $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
   const project = state.project, base = `${project.name} - `;
-  const dir = await exportsDir()
+  const projectDir = await exportsDir();
+  const dir = projectDir
     || (window.showDirectoryPicker ? await showDirectoryPicker({ id: 'exports', mode: 'readwrite' }) : null);
   const files = project.floors.flatMap(fl => [
     { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
@@ -533,7 +534,10 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
     await writeHandle(await dir.getFileHandle(name, { create: true }), blob);
   }
   const where = dir ? (state.dirHandle && dir.name === EXPORTS_DIR ? `${state.dirHandle.name}/${EXPORTS_DIR}` : dir.name) : '';
-  notify(t('notify.exportedAll', { n: files.length, where }), 'ok', 7000);
+  const done = t('notify.exportedAll', { n: files.length, where });
+  // autre CSV commun déjà dans exports/ (ancien nom FR / NL, autre projet) : on prévient, sans rien supprimer
+  const warning = projectDir ? await otherCombinedWarning(projectDir, project.name) : '';
+  notify(warning ? `${done}. ${warning}` : done, warning ? 'warn' : 'ok', warning ? 15000 : 7000);
 }));
 
 function renderSaveState() {
