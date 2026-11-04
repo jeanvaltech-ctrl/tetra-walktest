@@ -288,20 +288,40 @@ await test('Seuils RSSI : le bouton « Seuils par défaut » applique le nouveau
   assert(!/background:#000"><\/span><span>&lt;/.test(app) && !app.includes(': No<'), 'panneau des seuils : « < dernier seuil » encore en noir « No »');
 });
 
-await test('Bandeau : « < -88 dBm » = points mesurés sous le dernier seuil, pas de service à part', async () => {
+await test('Bandeau : ASTRID, verdict, pas de service, distance ; ni part non conforme ni part sous un seuil', async () => {
   const { project } = await sampleProject();
-  // règle de docs/CSV.md : les autres parts sont tronquées ; 238/297 = 80,13… -> 80,1, à côté de non conforme = 100 - 19,8
-  const cap = caption(project, countsFloor(59, 297), 'fr');
-  assert(cap.includes('19,8 % des points') && cap.includes('non conforme : 80,2 %') && cap.includes('pas de service : 0,0 %') && cap.includes('< -88 dBm : 80,1 %'), cap);
-  assert(caption(project, countsFloor(59, 297), 'en').includes('< -88 dBm: 80.1 %'), caption(project, countsFloor(59, 297), 'en'));
-  // -88 pile : conforme, donc pas « sous » ; le point sans service n'y compte pas
+  // décision de Jean (04/11) : 59 conformes, 91 faibles, 147 sans service sur 297 ; 147/297 = 49,49… -> 49,4
+  const cap = caption(project, withNoService(countsFloor(59, 297), 147), 'fr');
+  assert(cap.endsWith('297 points dont 147 sans service · ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · pas de service : 49,4 % · distance parcourue : 19,7 %'), cap);
+  assert(!cap.includes('non conforme :') && !cap.includes('< -98') && !cap.includes('< -88 dBm :'), cap);
+  const en = caption(project, withNoService(countsFloor(59, 297), 147), 'en');
+  assert(en.endsWith('ASTRID: 19.8 % of points ≥ -88 dBm — NOT compliant (target 95 %) · no service: 49.4 % · distance covered: 19.7 %'), en);
+  assert(!en.includes('non-compliant') && !en.includes('< -88'), en);
+  const nl = caption(project, withNoService(countsFloor(59, 297), 147), 'nl');
+  assert(nl.endsWith('ASTRID: 19,8 % van de punten ≥ -88 dBm — voldoet NIET (doel 95 %) · geen service: 49,4 % · afgelegde weg: 19,7 %'), nl);
+  assert(!nl.includes('niet conform') && !nl.includes('< -88'), nl);
+  // la part « pas de service » ne dépend plus des seuils ; le point à -88 pile n'y compte pas
   const fl = countsFloor(4, 4), s = fl.segments[0].samples;
   s[0].rssi = -70; s[1].rssi = -88; s[2].rssi = -89; Object.assign(s[3], { rssi: '', noService: 'noserving' });
-  const sh = floorShares(fl, DEFAULT_THRESHOLDS);
-  assert(sh.below === 25 && sh.noService === 25, JSON.stringify(sh));
-  // un projet qui garde ses seuils garde aussi son dernier seuil dans le bandeau
+  const sh = floorShares(fl);
+  assert(sh.noService === 25 && !('below' in sh), JSON.stringify(sh));
+  // un projet qui garde ses seuils n'a pas non plus de part sous son dernier seuil
   project.thresholds = scoutProject().thresholds;
-  assert(caption(project, countsFloor(1, 3, -120), 'fr').includes('< -98 dBm : 66,6 %'), caption(project, countsFloor(1, 3, -120), 'fr'));
+  assert(!caption(project, countsFloor(1, 3, -120), 'fr').includes('< -98'), caption(project, countsFloor(1, 3, -120), 'fr'));
+  // le radio ISSI reste à sa place, après les parts
+  const withRadio = { ...countsFloor(1, 3), radio: { issi: '1234567' } };
+  assert(caption(project, withRadio, 'fr').endsWith(' · radio ISSI 1234567'), caption(project, withRadio, 'fr'));
+});
+
+await test('Textes : le critère ASTRID s\'écrit ≥ -88 dBm, jamais > -88', async () => {
+  for (const [key, entry] of Object.entries(STRINGS)) {
+    for (const l of LANGS) assert(!/>\s*-88/.test(String(entry[l])), `${key} (${l}) : ${entry[l]}`);
+  }
+  const e = STRINGS['btn.resetAstrid'];
+  assert(e.fr === 'Rétablir ASTRID (≥ -88 dBm, 95 %)' && e.nl === 'ASTRID herstellen (≥ -88 dBm, 95 %)' && e.en === 'Restore ASTRID (≥ -88 dBm, 95 %)', JSON.stringify(e));
+  const html = document.createElement('div');
+  html.innerHTML = await (await fetch('../index.html')).text();
+  assert(html.querySelector('#btn-criterion-reset').textContent === e.fr, 'index.html : ' + html.querySelector('#btn-criterion-reset').textContent);
 });
 
 // ---------- session par waypoints (M3) ----------
@@ -598,9 +618,9 @@ await test('Pas de service : compté NON conforme dans le % ASTRID (points)', ()
   // % des points (fait foi) : 20 points conformes sur ~50, les points « pas de service » comptent non conformes
   assert(Math.abs(r.pct - r.okN / r.n * 100) < 1e-9 && r.pct > 38 && r.pct < 42 && r.ok === false, `ASTRID ${r.pct} % des points, conforme : ${r.ok}`);
   assert(r.pctDistance > 55 && r.pctDistance < 72, `distance ${r.pctDistance}`);
-  assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part « pas de service » / sous le dernier seuil) n\'existe pas');
-  const sh = criterionMod.floorShares(noServiceWalk(), DEFAULT_THRESHOLDS);
-  assert(sh.noService > 56 && sh.noService < 62 && sh.below === 0, 'parts en % des points : ' + JSON.stringify(sh));
+  assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part « pas de service ») n\'existe pas');
+  const sh = criterionMod.floorShares(noServiceWalk());
+  assert(sh.noService > 56 && sh.noService < 62, 'parts en % des points : ' + JSON.stringify(sh));
 });
 
 await test('Pas de service : un trou de moins de 3 s n\'ajoute rien', () => {
@@ -653,7 +673,7 @@ await test('Pas de service : export CSV et PNG (trace noire à tirets, légende,
   const centre = [...Array(40)].map((_, i) => px(170 + i, 150));
   assert(centre.includes('255,255,255') && centre.includes('0,0,0'), 'tirets blancs absents : ' + [...new Set(centre)].join(' / '));
   const cap = caption(project, floor);
-  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && /< -88 dBm/.test(cap), cap);
+  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && !/< -88 dBm/.test(cap), cap);
   for (const l of LANGS) assert(STRINGS['legend.noService'] && STRINGS['legend.noService'][l], `légende « pas de service » en ${l}`);
 });
 
@@ -808,6 +828,12 @@ function countsFloor(ok, total, lowRssi = -95) {
     ({ la: 1001, channel: 100, c1: 10, time: t0 + i * 1000, ta: i * 1000, x: i, y: 0, leg: 1, rssi: i < ok ? -70 : lowRssi })) }] };
 }
 
+/** Les n dernières mesures de l'étage deviennent des points « pas de service ». */
+function withNoService(floor, n) {
+  for (const s of floor.segments[0].samples.slice(-n)) Object.assign(s, { rssi: '', noService: 'noserving' });
+  return floor;
+}
+
 await test('Langue des exports : anglais par défaut, choix mémorisé, valeur inconnue ignorée', () => keepingExportPref(async () => {
   assert(typeof i18nMod.getExportLang === 'function', 'getExportLang() n\'existe pas : aucun réglage de langue des exports');
   assert((await freshI18n(null)).getExportLang() === 'en', 'défaut : anglais');
@@ -840,7 +866,7 @@ await test('Langue des exports : interface FR, réglage par défaut -> légende 
   const cap = caption(project, floor, lang);
   assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
   assert(/without service/.test(cap) && /ASTRID: \d+\.\d % of points/.test(cap) && /NOT compliant \(target 95 %\)/.test(cap), cap);
-  assert(/distance walked/.test(cap) && /no service: \d+\.\d %/.test(cap) && /< -88 dBm: \d+\.\d %/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
+  assert(/distance covered/.test(cap) && /no service: \d+\.\d %/.test(cap) && !/< -88 dBm/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
   assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
 });
 
@@ -851,7 +877,7 @@ await test('Langue des exports : NL -> légende et bandeau en néerlandais, inte
   const cap = caption(project, floor, 'nl');
   assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
   assert(/zonder service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
-  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && /< -88 dBm: \d+,\d %/.test(cap), cap);
+  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && !/< -88 dBm/.test(cap), cap);
   assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
 });
 
@@ -1021,27 +1047,29 @@ await test('Langue des exports : sélecteur à côté des boutons d\'export, rel
   assert(/combinedCsvName\(/.test(app) && !app.includes(`t('file.allFloors')`), 'app.js nomme le CSV commun dans la langue de l\'interface');
 });
 
-await test('Pourcentages : 59/297 -> 19,8 conforme et 80,2 non conforme (100 - part affichée)', async () => {
+await test('Pourcentages : 59/297 -> 19,8, NON conforme, sans part non conforme', async () => {
   const { project } = await sampleProject();
   const fl = countsFloor(59, 297), r = floorCompliance(fl);
   assert(r.ok === false && fmtPct(r.pct) === '19,8 %', `${r.ok} ${fmtPct(r.pct)}`);
   const cap = caption(project, fl, 'fr');
-  assert(cap.includes('19,8 % des points'), cap);
-  assert(cap.includes('non conforme : 80,2 %'), 'part non conforme absente du bandeau ou mal calculée : ' + cap);
-  assert(caption(project, fl, 'en').includes('non-compliant: 80.2 %'), caption(project, fl, 'en'));
-  assert(caption(project, fl, 'nl').includes('niet conform: 80,2 %'), caption(project, fl, 'nl'));
+  assert(cap.includes('19,8 % des points') && cap.includes('NON conforme'), cap);
+  assert(!cap.includes('80,2') && !cap.includes('non conforme :'), 'part non conforme encore dans le bandeau : ' + cap);
+  const en = caption(project, fl, 'en'), nl = caption(project, fl, 'nl');
+  assert(en.includes('19.8 %') && en.includes('NOT compliant') && !en.includes('non-compliant'), en);
+  assert(nl.includes('19,8 %') && !nl.includes('niet conform'), nl);
 });
 
-await test('Pourcentages : 9496/10000 -> NON conforme, 94,9 et 5,1 ; 19/20 -> conforme, 95,0 et 5,0', async () => {
+await test('Pourcentages : 9496/10000 -> 94,9 NON conforme ; 95/100 et 19/20 -> 95,0 conforme', async () => {
   const { project } = await sampleProject();
   const fl = countsFloor(9496, 10000), r = floorCompliance(fl);
   assert(r.ok === false, '94,96 % déclaré conforme');
   const cap = caption(project, fl, 'fr');
-  assert(cap.includes('94,9 % des points') && cap.includes('NON conforme') && !cap.includes('95,0 %'), cap);
-  assert(cap.includes('non conforme : 5,1 %'), cap);
-  const pile = countsFloor(19, 20), capPile = caption(project, pile, 'fr');
-  assert(floorCompliance(pile).ok === true, '95 % pile : conforme');
-  assert(capPile.includes('95,0 % des points') && capPile.includes('non conforme : 5,0 %'), capPile);
+  assert(cap.includes('94,9 % des points') && cap.includes('NON conforme') && !cap.includes('95,0 %') && !cap.includes('non conforme :'), cap);
+  for (const [ok, total] of [[95, 100], [19, 20]]) {
+    const pile = countsFloor(ok, total), capPile = caption(project, pile, 'fr');
+    assert(floorCompliance(pile).ok === true, '95 % pile : conforme');
+    assert(capPile.includes('95,0 % des points ≥ -88 dBm — conforme (objectif 95 %)') && !capPile.includes('NON conforme') && !capPile.includes('non conforme :'), capPile);
+  }
 });
 
 await test('Pourcentages : verdict et troncature sans erreur de virgule flottante, autres parts tronquées', async () => {
@@ -1050,9 +1078,9 @@ await test('Pourcentages : verdict et troncature sans erreur de virgule flottant
   assert(floorCompliance(fl, { rssi: -88, percent: 29 }).ok === true, '29/100 pour un objectif de 29 % : verdict sur les comptes exacts');
   assert(fmtPct(floorCompliance(fl).pct) === '29,0 %', `29/100 affiché ${fmtPct(floorCompliance(fl).pct)}`);
   const { project } = await sampleProject();
-  // 1 point conforme, 2 sous -88 dBm : 66,66… % tronqué à 66,6 (pas 66,7), non conforme = 100 - 33,3
-  const cap = caption(project, countsFloor(1, 3, -120), 'fr');
-  assert(cap.includes('< -88 dBm : 66,6 %') && cap.includes('non conforme : 66,7 %'), cap);
+  // 1 point conforme, 2 sans service : 66,66… % tronqué à 66,6 (pas 66,7)
+  const cap = caption(project, withNoService(countsFloor(1, 3), 2), 'fr');
+  assert(cap.includes('33,3 % des points') && cap.includes('pas de service : 66,6 %'), cap);
 });
 
 const ko = results.filter(r => !r.ok).length;
