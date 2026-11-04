@@ -438,6 +438,109 @@ await test('Copie de secours : écriture incrémentale des trames et relecture',
   assert(await new AutoSave(name).load() === null, 'effacement');
 });
 
+// ---------- pas de service (terrain du 04/11 : aucune trace dans la zone sans couverture) ----------
+// Attendu : au-delà de 3 s sans mesure valide de la cellule serveuse, un point « pas de service »
+// par seconde manquante, tracé en noir à tirets blancs et compté NON conforme (% de la distance).
+const sessionMod = await import('../js/session.js');
+const criterionMod = await import('../js/criterion.js');
+
+/** Corps de bloc de mesure 'B' … 6f 00 00 avec des enregistrements [id, valeur]. */
+function buildBody(recs, seq = 1) {
+  const payload = [0x6f, 0, 0];
+  for (const [id, v] of recs) payload.push(id, 2, 0, 0, (v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+  payload.push(0);
+  return Uint8Array.from([0x42, seq, payload.length, ...payload]);
+}
+
+/** 3 tronçons de 100 px : -70 dBm sur le 1er et le 3e, rien du tout pendant 30 s sur le 2e. */
+function noServiceWalk(cause = 'noserving', y = 0, x0 = 0) {
+  let now = 0;
+  const floor = { segments: [] };
+  const s = new Session(floor, () => now);
+  s.checkService ??= () => 0;          // code d'avant la correction : rien ne détecte la perte de service
+  const ok = () => ({ la: 1001, channel: 100, rssi: -70, c1: 10 });
+  const tick = until => { while (now < until) { now += 1000; s.checkService(now, cause); } };
+  s.start(); s.click({ x: x0, y });
+  for (let i = 1; i <= 10; i++) { now = i * 1000; s.addSample(ok(), now); s.checkService(now, cause); }
+  now = 10500; s.click({ x: x0 + 100, y });
+  tick(40000); now = 40500; s.click({ x: x0 + 200, y });          // 30 s sans aucune mesure valide
+  for (let i = 1; i <= 10; i++) { now = 40500 + i * 1000; s.addSample(ok(), now); s.checkService(now, cause); }
+  now = 51000; s.click({ x: x0 + 300, y });
+  s.stop();
+  return floor;
+}
+
+await test('Pas de service : le tronçon sans mesure reçoit des points « pas de service »', () => {
+  const floor = noServiceWalk('noserving');
+  const seg = floor.segments[0], leg2 = seg.samples.filter(x => x.leg === 2);
+  assert(leg2.length >= 28, `${leg2.length} point(s) sur le tronçon sans service (aucun = pas de trace)`);
+  assert(leg2.every(x => x.noService === 'noserving' && x.rssi === ''), JSON.stringify(leg2[0]));
+  assert(sessionMod.NO_SERVICE_MS === 3000, `délai ${sessionMod.NO_SERVICE_MS}`);
+});
+
+await test('Pas de service : compté NON conforme dans le % ASTRID (distance parcourue)', () => {
+  const r = floorCompliance(noServiceWalk());
+  // aujourd'hui : 100 % « conforme » alors qu'un tiers du trajet n'a aucun service
+  assert(r.pct > 55 && r.pct < 72 && r.ok === false, `ASTRID ${r.pct} %, conforme : ${r.ok}`);
+  assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part de distance « pas de service » / « < -98 ») n\'existe pas');
+  const sh = criterionMod.floorShares(noServiceWalk(), DEFAULT_THRESHOLDS);
+  assert(sh.noService > 28 && sh.noService < 40 && sh.below === 0, JSON.stringify(sh));
+});
+
+await test('Pas de service : un trou de moins de 3 s n\'ajoute rien', () => {
+  let now = 0;
+  const floor = { segments: [] }, s = new Session(floor, () => now);
+  s.checkService ??= () => 0;
+  s.start(); s.click({ x: 0, y: 0 });
+  for (const t of [1000, 2000, 4900, 6000]) { now = t; s.addSample({ la: 1001, rssi: -70 }, t); s.checkService(t, 'noserving'); }
+  now = 6500; s.click({ x: 100, y: 0 });
+  assert(floor.segments[0].samples.length === 4 && floor.segments[0].samples.every(x => !x.noService), JSON.stringify(floor.segments[0].samples.map(x => x.noService || x.rssi)));
+});
+
+await test('Pas de service : radio muette (aucune trame) ou trames sans cellule serveuse', async () => {
+  // trames reçues, mais aucune ne contient la cellule serveuse (LA + RSSI) : voisines seules
+  const neighbourOnly = buildBody([[0x18, 1002], [0x19, -101]]);
+  const port = new FakePort({ info: FAKE_INFO, bodies: [neighbourOnly, neighbourOnly, neighbourOnly] });
+  const radio = new Radio();
+  let frames = 0, measures = 0;
+  radio.addEventListener('frame', () => frames++);
+  radio.addEventListener('measure', () => measures++);
+  await radio.connect(port);
+  await waitFor(() => frames >= 3);
+  assert(measures === 0, `${measures} mesure(s) sans cellule serveuse`);
+  assert(typeof sessionMod.noServiceCause === 'function', `${frames} trames reçues sans cellule serveuse, mais rien ne le signale (noServiceCause() n'existe pas)`);
+  const now = Date.now();
+  assert(sessionMod.noServiceCause(radio.lastFrameAt, now) === 'noserving', 'trames reçues : ' + sessionMod.noServiceCause(radio.lastFrameAt, now));
+  assert(sessionMod.noServiceCause(radio.lastFrameAt, now + 3000) === 'silent', 'plus de trame depuis 3 s');
+  assert(sessionMod.noServiceCause(0, now) === 'silent', 'aucune trame');
+  await radio.disconnect();
+  const leg2 = noServiceWalk('silent').segments[0].samples.filter(x => x.leg === 2);
+  assert(leg2.length && leg2.every(x => x.noService === 'silent'), 'cause « silent » non enregistrée');
+});
+
+await test('Pas de service : export CSV et PNG (trace noire à tirets, légende, bandeau)', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;   // de (50,150) à (350,150)
+  const csv = floorCsv(floor).slice(1).trimEnd().split('\r\n');
+  const cols = csv[0].split(';');
+  assert(cols.includes('no_service'), 'colonne no_service absente : ' + csv[0]);
+  const rows = csv.slice(1).map(l => Object.fromEntries(l.split(';').map((v, i) => [cols[i], v])));
+  const ns = rows.filter(r => r.no_service === '1');
+  assert(ns.length >= 28 && ns.every(r => r.rssi === '' && r.astrid_ok === '0'), `${ns.length} lignes « pas de service »`);
+  const img = await createImageBitmap(floor.image.blob);
+  const bmp = await createImageBitmap(await floorPng(project, floor, img));
+  const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
+  g.drawImage(bmp, 0, 0);
+  const px = (x, y) => [...g.getImageData(x, y, 1, 1).data.slice(0, 3)].join(',');
+  // tronçon 2 (x 150 à 250) : noir sur le bord du trait, tirets blancs au centre
+  assert(px(200, 152) === '0,0,0', `bord du trait « pas de service » : ${px(200, 152)} (attendu noir)`);
+  const centre = [...Array(40)].map((_, i) => px(170 + i, 150));
+  assert(centre.includes('255,255,255') && centre.includes('0,0,0'), 'tirets blancs absents : ' + [...new Set(centre)].join(' / '));
+  const cap = caption(project, floor);
+  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && /< -98 dBm/.test(cap), cap);
+  for (const l of LANGS) assert(STRINGS['legend.noService'] && STRINGS['legend.noService'][l], `légende « pas de service » en ${l}`);
+});
+
 // ---------- langues ----------
 await test('Langues : chaque texte existe en FR, NL et EN', () => {
   const missing = Object.entries(STRINGS).flatMap(([k, e]) => LANGS.filter(l => !(l in e)).map(l => `${k}:${l}`));
