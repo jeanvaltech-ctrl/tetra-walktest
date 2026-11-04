@@ -12,7 +12,7 @@ export const DEFAULT_THRESHOLDS = [
 ];
 export const NO_COVERAGE = { color: '#000000', label: 'No' };
 
-// Ancienne légende par défaut (jusqu'au 22/10/2026) : orange jusqu'à -72, plus large que SCOUT.
+// Ancienne légende par défaut (corrigée après comparaison terrain) : orange jusqu'à -72, plus large que SCOUT.
 const OLD_DEFAULT_MINS = [-65, -72, -85, -87, -98];
 
 /** Projet enregistré avec l'ancienne légende par défaut : passe à la légende SCOUT corrigée. */

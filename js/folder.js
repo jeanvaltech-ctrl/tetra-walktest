@@ -1,8 +1,8 @@
 // folder.js — dossier projet sur le disque (API File System Access, Edge / Chrome).
 //
-//   SSV_Site_21-10-2026/                  nom du dossier = nom du projet
+//   SSV_Site_01-01-2000/                  nom du dossier = nom du projet
 //     plans/Floor -1.png, Floor 00.jpg…   un plan par étage (PNG, JPG ; à la racine si pas de « plans »)
-//     SSV_Site_21-10-2026.walktest.json   projet enregistré par l'appli (mesures comprises)
+//     SSV_Site_01-01-2000.walktest.json   projet enregistré par l'appli (mesures comprises)
 //     exports/                            PNG et CSV exportés
 
 export const PLANS_DIR = 'plans';

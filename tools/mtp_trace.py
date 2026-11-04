@@ -3,7 +3,7 @@
 mtp_trace.py — décodeur du flux de mesure Motorola MTP6550 (tel qu'utilisé par SCOUT 19.12)
 
 Reconstitué à partir d'une capture USBPcap + des fichiers SCOUT (.atp / Export.csv)
-d'une mesure du 21/10/2026.
+d'une mesure réelle.
 
 PROTOCOLE (interface USB 0, VID 0x0CAD / PID 0x9012, bulk EP 0x01 OUT / 0x81 IN)
 ------------------------------------------------------------------------------

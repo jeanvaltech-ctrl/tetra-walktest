@@ -52,9 +52,9 @@ la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV n
 Préparer un dossier par bâtiment, avec un plan par étage dans un sous-dossier `plans` :
 
 ```
-SSV_Site_21-10-2026/            nom du dossier = nom du projet
+SSV_Site_01-01-2000/            nom du dossier = nom du projet
   plans/                        Floor -1.png, Floor 00.jpg, Floor 01.png…
-  SSV_Site_21-10-2026.walktest.json   créé par l'appli à l'enregistrement
+  SSV_Site_01-01-2000.walktest.json   créé par l'appli à l'enregistrement
   exports/                      créé par l'appli : PNG et CSV
 ```
 
@@ -135,11 +135,15 @@ Puis ouvrir dans Edge ou Chrome :
 - `http://localhost:8000/tests/` : les tests (décodeur, géométrie, radio sur faux port,
   session, exports, sauvegarde).
 
+Tests des outils Python (bibliothèque standard seulement), depuis la racine du dépôt :
+`python3 -m unittest discover -s tests -p 'test_*.py'`.
+
 Web Serial et le service worker exigent `https://` ou `localhost` (pas `file://`).
 Après une modification, incrémenter `VERSION` dans `sw.js` si la liste des fichiers change.
 
 **Données de test** : `tests/fixtures/demo.atp` est une vraie mesure SCOUT anonymisée par
 `tools/anonymize_atp.py` (identité radio, LA et canaux remplacés par des valeurs fictives,
+date et heure de l'en-tête remplacées par 01.01.2000 00:00:00, chemins SCOUT supprimés,
 trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dépôt : le
 `.gitignore` exclut les `.atp`, les exports et les projets `.walktest.json`.
 
