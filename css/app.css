@@ -69,6 +69,9 @@ dl.info dd { margin: 0; overflow-wrap: anywhere; }
 }
 .rssi-badge b { font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
 .rssi-badge span { font-size: 11px; opacity: .85; }
+.rssi-badge.no-service b { font-size: 15px; line-height: 1.15; text-align: center; }
+.rssi-badge.no-service span { display: none; }
+#live-age.silent { padding: 6px 10px; border-radius: 6px; background: #b3261e; color: #fff; font-size: 14px; font-weight: 700; }
 table.neigh { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 table.neigh th { font-weight: 500; color: var(--muted); font-size: 12px; text-align: right; padding: 2px 4px; }
 table.neigh td { text-align: right; padding: 3px 4px; border-top: 1px solid var(--line); }
