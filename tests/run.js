@@ -666,6 +666,200 @@ await test('Langues : pluriels et paramètres', () => {
   assert(t('floor.count', { n: 2 }) === '2 mesures', t('floor.count', { n: 2 }));
 });
 
+// ---------- langue des exports (le PNG part dans le rapport CRG, quelle que soit la langue de l'interface) ----------
+// Attendu : réglage FR / NL / EN, anglais par défaut, mémorisé à part. Aujourd'hui, une interface en
+// français met « Pas de service » dans le PNG d'un rapport néerlandais.
+const i18nMod = await import('../js/i18n.js');
+const renderMod = await import('../js/render.js');
+const exportMod = await import('../js/export.js');
+// un espace de noms de module est figé (« ns.fn ??= … » lèverait une erreur et stopperait run.js) :
+// les remplaçants reproduisent le comportement d'avant la correction (langue de l'interface)
+const getLang = i18nMod.getLang;
+const getExportLang = i18nMod.getExportLang ?? (() => undefined);
+const setExportLang = i18nMod.setExportLang ?? (() => undefined);
+const tx = i18nMod.tx ?? ((l, key, params) => t(key, params));
+const legendLines = renderMod.legendLines ?? (() => [t('legend.noService')]);
+const combinedCsvName = exportMod.combinedCsvName ?? (name => `${name} - ${t('file.allFloors')}.csv`);
+
+const EXPORT_KEY = 'tetra-walktest.exportLang';
+let freshN = 0;
+/** i18n.js rechargé comme au démarrage de l'appli, avec cette valeur mémorisée (null : aucune). */
+function freshI18n(saved) {
+  if (saved === null) localStorage.removeItem(EXPORT_KEY); else localStorage.setItem(EXPORT_KEY, saved);
+  return import(`../js/i18n.js?fresh=${++freshN}`);
+}
+/** Exécute fn puis rend à ce navigateur la préférence mémorisée qu'il avait avant le test. */
+async function keepingExportPref(fn) {
+  const before = localStorage.getItem(EXPORT_KEY);
+  try { return await fn(); }
+  finally { if (before === null) localStorage.removeItem(EXPORT_KEY); else localStorage.setItem(EXPORT_KEY, before); }
+}
+const defaultExportLang = () => keepingExportPref(async () => (await freshI18n(null)).getExportLang?.());
+
+/** Étage fictif : les `ok` premiers points à -70 dBm, les autres à `lowRssi`, un point par seconde dès 10:00:00. */
+function countsFloor(ok, total, lowRssi = -95) {
+  const t0 = new Date(2000, 0, 1, 10, 0, 0).getTime();
+  return { name: 'Étage -1', segments: [{ id: 's1', points: [], samples: Array.from({ length: total }, (_, i) =>
+    ({ la: 1001, channel: 100, c1: 10, time: t0 + i * 1000, ta: i * 1000, x: i, y: 0, leg: 1, rssi: i < ok ? -70 : lowRssi })) }] };
+}
+
+await test('Langue des exports : anglais par défaut, choix mémorisé, valeur inconnue ignorée', () => keepingExportPref(async () => {
+  assert(typeof i18nMod.getExportLang === 'function', 'getExportLang() n\'existe pas : aucun réglage de langue des exports');
+  assert((await freshI18n(null)).getExportLang() === 'en', 'défaut : anglais');
+  assert((await freshI18n('xx')).getExportLang() === 'en', 'valeur mémorisée inconnue : anglais');
+  assert((await freshI18n('nl')).getExportLang() === 'nl', 'valeur mémorisée non relue au démarrage');
+  localStorage.removeItem(EXPORT_KEY);
+  const uiLang = localStorage.getItem('tetra-walktest.lang');
+  setExportLang('fr');
+  assert(getExportLang() === 'fr' && localStorage.getItem(EXPORT_KEY) === 'fr', `non mémorisé : ${localStorage.getItem(EXPORT_KEY)}`);
+  setExportLang('xx');
+  assert(getExportLang() === 'fr', 'langue inconnue acceptée');
+  assert(localStorage.getItem('tetra-walktest.lang') === uiLang && getLang() === 'fr', 'la langue de l\'interface a changé');
+  setExportLang('en', false);
+}));
+
+await test('Langue des exports : traduire dans une langue donnée sans changer celle de l\'interface', () => {
+  assert(tx('en', 'legend.noService') === 'No service', tx('en', 'legend.noService'));
+  assert(tx('nl', 'floor.count', { n: 1234 }) === '1.234 metingen', tx('nl', 'floor.count', { n: 1234 }));
+  assert(tx('en', 'floor.count', { n: 1234 }) === '1,234 measurements', tx('en', 'floor.count', { n: 1234 }));
+  assert(i18nMod.nf(19.8, 1, 'en') === '19.8' && i18nMod.nf(19.8, 1, 'nl') === '19,8', `nf : ${i18nMod.nf(19.8, 1, 'en')}`);
+  assert(getLang() === 'fr' && t('legend.noService') === 'Pas de service' && i18nMod.nf(19.8, 1) === '19,8', 'interface modifiée');
+});
+
+await test('Langue des exports : interface FR, réglage par défaut -> légende et bandeau en anglais', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  floor.radio = { issi: '1234567' };
+  const lang = await defaultExportLang();
+  assert(legendLines(DEFAULT_THRESHOLDS, lang).includes('No service'), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, lang).join(' | '));
+  const cap = caption(project, floor, lang);
+  assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
+  assert(/without service/.test(cap) && /ASTRID: \d+\.\d % of points/.test(cap) && /NOT compliant \(target 95 %\)/.test(cap), cap);
+  assert(/distance walked/.test(cap) && /no service: \d+\.\d %/.test(cap) && /< -98 dBm: \d+\.\d %/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
+  assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
+});
+
+await test('Langue des exports : NL -> légende et bandeau en néerlandais, interface inchangée', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  assert(legendLines(DEFAULT_THRESHOLDS, 'nl').includes(STRINGS['legend.noService'].nl), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, 'nl').join(' | '));
+  const cap = caption(project, floor, 'nl');
+  assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
+  assert(/zonder service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
+  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && /< -98 dBm: \d+,\d %/.test(cap), cap);
+  assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
+});
+
+await test('Langue des exports : dates et nombres du bandeau selon la langue, pas selon l\'interface', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(59, 1234);   // 1 234 points de 10:00:00 à 10:20:33
+  const en = caption(project, fl, 'en'), nl = caption(project, fl, 'nl');
+  assert(en.includes('1,234 measurements') && en.includes('01/01/2000 10:00–10:20'), en);
+  assert(nl.includes('1.234 metingen') && !nl.includes('2000-01-01') && nl.includes('10:00–10:20'), nl);
+  assert(en.includes('4.7 %') && nl.includes('4,7 %'), `${en} / ${nl}`);
+});
+
+await test('Langue des exports : textes dessinés dans le PNG (légende, bandeau, échelle), écran inchangé', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  floor.calibration = { ...floor.calibration, mPerPx: 0.05 };   // barre d'échelle de 5 m : décimale visible
+  const img = await createImageBitmap(floor.image.blob);
+  const proto = OffscreenCanvasRenderingContext2D.prototype, real = proto.fillText;
+  let drawn = [];
+  proto.fillText = function (text, ...rest) { drawn.push(String(text)); return real.call(this, text, ...rest); };
+  try {
+    setExportLang('nl', false);
+    await floorPng(project, floor, img);
+    const nl = drawn.join(' | ');
+    assert(drawn.includes(STRINGS['legend.noService'].nl) && !drawn.includes('Pas de service'), 'légende du PNG : ' + nl);
+    assert(/van de punten/.test(nl) && !/des points/.test(nl), 'bandeau du PNG : ' + nl);
+    assert(drawn.includes('5,0 m'), 'échelle : ' + nl);
+    assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée par l\'export');
+
+    drawn = [];
+    setExportLang('en', false);
+    await floorPng(project, floor, img);
+    assert(drawn.includes('No service') && drawn.includes('5.0 m') && drawn.join(' | ').includes('of points'), 'PNG en anglais : ' + drawn.join(' | '));
+
+    // la légende à l'écran garde la langue de l'interface
+    drawn = [];
+    renderMod.drawLegend(new OffscreenCanvas(200, 200).getContext('2d'), 0, 0, DEFAULT_THRESHOLDS);
+    assert(drawn.includes('Pas de service'), 'légende à l\'écran : ' + drawn.join(' | '));
+    assert(renderMod.fmtMeters(5.5) === '5,5 m', `échelle à l'écran : ${renderMod.fmtMeters(5.5)}`);
+  } finally {
+    proto.fillText = real;
+    setExportLang('en', false);
+  }
+});
+
+await test('Langue des exports : nom du CSV commun selon la langue, contenu des CSV inchangé', async () => {
+  try {
+    assert(combinedCsvName('Plans', 'en') === 'Plans - all floors.csv', combinedCsvName('Plans', 'en'));
+    assert(combinedCsvName('Plans', 'nl') === 'Plans - alle verdiepingen.csv', combinedCsvName('Plans', 'nl'));
+    assert(combinedCsvName('Plans', 'fr') === 'Plans - tous les étages.csv', combinedCsvName('Plans', 'fr'));
+    setExportLang('nl', false);
+    assert(combinedCsvName('Plans') === 'Plans - alle verdiepingen.csv', 'sans langue précisée : ' + combinedCsvName('Plans'));
+    const { project, floor } = await sampleProject();
+    const csvFl = floorCsv(floor), csvAll = projectCsv(project);
+    setExportLang('en', false);
+    assert(floorCsv(floor) === csvFl && projectCsv(project) === csvAll, 'le contenu du CSV dépend de la langue des exports');
+    assert(csvFl.slice(1).startsWith(CSV_COLUMNS.join(';')), 'en-têtes du CSV modifiés');
+  } finally {
+    setExportLang('en', false);
+  }
+});
+
+await test('Langue des exports : sélecteur à côté des boutons d\'export, relié au réglage', async () => {
+  const html = document.createElement('div');
+  html.innerHTML = await (await fetch('../index.html')).text();
+  const sel = html.querySelector('select#export-lang');
+  assert(sel, 'select#export-lang absent de index.html');
+  assert([...sel.options].map(o => o.value).join(',') === LANGS.join(','), 'options : ' + [...sel.options].map(o => o.value).join(','));
+  const label = html.querySelector('label[for="export-lang"]');
+  assert(label && label.dataset.i18n === 'label.exportLang', 'libellé du sélecteur');
+  const e = STRINGS['label.exportLang'];
+  assert(e.fr === 'Langue des exports' && e.nl === 'Taal van de exports' && e.en === 'Export language', JSON.stringify(e));
+  const panel = html.querySelector('#btn-export-all').closest('section');
+  assert(panel.contains(sel), 'le sélecteur n\'est pas dans le panneau des exports');
+  const app = await (await fetch('../js/app.js')).text();
+  assert(/setExportLang\(/.test(app) && /getExportLang\(/.test(app), 'app.js ne relie pas le sélecteur au réglage');
+  assert(/combinedCsvName\(/.test(app) && !app.includes(`t('file.allFloors')`), 'app.js nomme le CSV commun dans la langue de l\'interface');
+});
+
+await test('Pourcentages : 59/297 -> 19,8 conforme et 80,2 non conforme (100 - part affichée)', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(59, 297), r = floorCompliance(fl);
+  assert(r.ok === false && fmtPct(r.pct) === '19,8 %', `${r.ok} ${fmtPct(r.pct)}`);
+  const cap = caption(project, fl, 'fr');
+  assert(cap.includes('19,8 % des points'), cap);
+  assert(cap.includes('non conforme : 80,2 %'), 'part non conforme absente du bandeau ou mal calculée : ' + cap);
+  assert(caption(project, fl, 'en').includes('non-compliant: 80.2 %'), caption(project, fl, 'en'));
+  assert(caption(project, fl, 'nl').includes('niet conform: 80,2 %'), caption(project, fl, 'nl'));
+});
+
+await test('Pourcentages : 9496/10000 -> NON conforme, 94,9 et 5,1 ; 19/20 -> conforme, 95,0 et 5,0', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(9496, 10000), r = floorCompliance(fl);
+  assert(r.ok === false, '94,96 % déclaré conforme');
+  const cap = caption(project, fl, 'fr');
+  assert(cap.includes('94,9 % des points') && cap.includes('NON conforme') && !cap.includes('95,0 %'), cap);
+  assert(cap.includes('non conforme : 5,1 %'), cap);
+  const pile = countsFloor(19, 20), capPile = caption(project, pile, 'fr');
+  assert(floorCompliance(pile).ok === true, '95 % pile : conforme');
+  assert(capPile.includes('95,0 % des points') && capPile.includes('non conforme : 5,0 %'), capPile);
+});
+
+await test('Pourcentages : verdict et troncature sans erreur de virgule flottante, autres parts tronquées', async () => {
+  // 29/100*100 = 28,999999999999996 en virgule flottante : verdict faux et « 28,9 % » affiché
+  const fl = countsFloor(29, 100);
+  assert(floorCompliance(fl, { rssi: -88, percent: 29 }).ok === true, '29/100 pour un objectif de 29 % : verdict sur les comptes exacts');
+  assert(fmtPct(floorCompliance(fl).pct) === '29,0 %', `29/100 affiché ${fmtPct(floorCompliance(fl).pct)}`);
+  const { project } = await sampleProject();
+  // 1 point conforme, 2 sous -98 dBm : 66,66… % tronqué à 66,6 (pas 66,7), non conforme = 100 - 33,3
+  const cap = caption(project, countsFloor(1, 3, -120), 'fr');
+  assert(cap.includes('< -98 dBm : 66,6 %') && cap.includes('non conforme : 66,7 %'), cap);
+});
+
 const ko = results.filter(r => !r.ok).length;
 document.getElementById('out').innerHTML = results.map(r =>
   `<div class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${r.name}</div>` + (r.err ? `<pre>${r.err}</pre>` : '')
