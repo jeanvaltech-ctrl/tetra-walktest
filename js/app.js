@@ -867,7 +867,7 @@ function renderThresholds() {
   $('crit-pct').value = criterion().percent;
 }
 
-// critère ASTRID réglable (par défaut : > -88 dBm sur 95 %)
+// critère ASTRID réglable (par défaut : ≥ -88 dBm sur 95 %)
 function setCriterion(c) {
   state.project.criterion = c;
   markDirty();

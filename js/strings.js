@@ -324,11 +324,11 @@ export const STRINGS = {
   'crit.over': { fr: 'sur', nl: 'voor', en: 'over' },
   'aria.critRssi': { fr: 'Seuil ASTRID (dBm)', nl: 'ASTRID-drempel (dBm)', en: 'ASTRID threshold (dBm)' },
   'aria.critPct': { fr: 'Pourcentage exigé', nl: 'Vereist percentage', en: 'Required percentage' },
-  'btn.resetAstrid': { fr: 'Rétablir ASTRID (> -88 dBm, 95 %)', nl: 'ASTRID herstellen (> -88 dBm, 95 %)', en: 'Restore ASTRID (> -88 dBm, 95 %)' },
+  'btn.resetAstrid': { fr: 'Rétablir ASTRID (≥ -88 dBm, 95 %)', nl: 'ASTRID herstellen (≥ -88 dBm, 95 %)', en: 'Restore ASTRID (≥ -88 dBm, 95 %)' },
   'compliance.text': {
-    fr: p => `ASTRID : ${p.pct} des points ≥ ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %)${p.dist ? ` · distance parcourue : ${p.dist}` : ''}`,
-    nl: p => `ASTRID: ${p.pct} van de punten ≥ ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %)${p.dist ? ` · afgelegde weg: ${p.dist}` : ''}`,
-    en: p => `ASTRID: ${p.pct} of points ≥ ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %)${p.dist ? ` · distance walked: ${p.dist}` : ''}`,
+    fr: p => `ASTRID : ${p.pct} des points ≥ ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %) · pas de service : ${p.noService} · distance parcourue : ${p.dist}`,
+    nl: p => `ASTRID: ${p.pct} van de punten ≥ ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %) · geen service: ${p.noService} · afgelegde weg: ${p.dist}`,
+    en: p => `ASTRID: ${p.pct} of points ≥ ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %) · no service: ${p.noService} · distance covered: ${p.dist}`,
   },
   'legend.noService': { fr: 'Pas de service', nl: 'Geen service', en: 'No service' },
 
@@ -338,8 +338,5 @@ export const STRINGS = {
     nl: p => (p.ns ? `${p.f(p.n)} punten waarvan ${p.f(p.ns)} zonder service` : `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`),
     en: p => (p.ns ? `${p.f(p.n)} points, ${p.f(p.ns)} without service` : `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}`),
   },
-  'caption.nonCompliant': { fr: 'non conforme : {pct}', nl: 'niet conform: {pct}', en: 'non-compliant: {pct}' },
-  'caption.noService': { fr: 'pas de service : {pct}', nl: 'geen service: {pct}', en: 'no service: {pct}' },
-  'caption.below': { fr: '< {rssi} dBm : {pct}', nl: '< {rssi} dBm: {pct}', en: '< {rssi} dBm: {pct}' },
   'caption.radio': { fr: 'radio ISSI {issi}', nl: 'radio ISSI {issi}', en: 'radio ISSI {issi}' },
 };
