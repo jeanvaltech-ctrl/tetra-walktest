@@ -37,6 +37,10 @@ sans couverture (~10 s toutes les ~40 s) : `?demo=noservice` (trames sans cellul
 **Langue** : français, néerlandais ou anglais (boutons FR | NL | EN en haut à droite). Par défaut,
 la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
 
+**Langue des exports** : réglage à part (FR / NL / EN, à côté des boutons d'export, **anglais par
+défaut**, mémorisé sur le poste) pour ce qui est écrit dans le PNG (légende, bandeau, échelle) et pour
+le nom du CSV commun. L'écran garde la langue de l'interface ; le contenu des CSV ne change jamais.
+
 ### Mesurer
 
 1. Créer un projet (nom, bâtiment, étage, plan), et calibrer l'échelle si besoin (2 points +
@@ -97,10 +101,10 @@ comptent comme des points non conformes. L'appli l'évalue en direct :
 - **par étage** (panneau Mesure, liste des étages ✔ / ✘) : **% des points** conformes, qui fait
   foi, comparé à l'objectif. Le % de la **distance parcourue** (chaque mesure compte pour le bout
   de trajet qu'elle couvre) est affiché à titre d'information. Les pourcentages sont arrondis vers
-  le bas ;
+  le bas, le verdict porte sur les comptes exacts ([règle](docs/CSV.md#pourcentages-et-verdict)) ;
 - **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict en % des points,
-  % de la distance en information, parts des points sans service et sous le dernier seuil dans le
-  bandeau du PNG.
+  % de la distance en information, parts des points non conformes, sans service et sous le dernier
+  seuil dans le bandeau du PNG.
 
 Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ». Question ouverte, non
 tranchée : -88 dBm s'applique ici radio portée (perte corporelle incluse), alors que l'Annexe 6 de
@@ -115,11 +119,13 @@ la convention ASTRID donne -98 dBm pour une mesure radio portée.
   `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx;astrid_ok;no_service`
   (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré ;
   `no_service` = 1 : point « pas de service », cellules de mesure vides et `astrid_ok` à 0).
+  Contrat complet, lu par CRG : [`docs/CSV.md`](docs/CSV.md).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
   (projet, étage, horaire, nombre de points, verdict ASTRID en % des points avec la distance
-  parcourue en information, « pas de service : x % », « < -98 dBm : y % » des points, ISSI de la radio).
+  parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -98 dBm : z % »
+  des points, ISSI de la radio), dans la langue des exports.
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
-  un CSV commun « tous les étages » trié par heure.
+  un CSV commun trié par heure, nommé selon la langue des exports (`<projet> - all floors.csv` par défaut).
 
 ### Incidents
 
@@ -185,6 +191,7 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `tests/` | tests navigateur et jeu de test anonymisé |
 | `tools/` | outils Python : lecture en direct, `.atp` → CSV, anonymisation |
 | `docs/PROTOCOL.md` | protocole du MTP6550 (rétro-ingénierie de SCOUT) |
+| `docs/CSV.md` | contrat du CSV exporté, lu par CRG |
 
 ## Licence
 
