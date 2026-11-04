@@ -679,7 +679,8 @@ const getExportLang = i18nMod.getExportLang ?? (() => undefined);
 const setExportLang = i18nMod.setExportLang ?? (() => undefined);
 const tx = i18nMod.tx ?? ((l, key, params) => t(key, params));
 const legendLines = renderMod.legendLines ?? (() => [t('legend.noService')]);
-const combinedCsvName = exportMod.combinedCsvName ?? (name => `${name} - ${t('file.allFloors')}.csv`);
+const combinedCsvName = exportMod.combinedCsvName;
+const otherCombinedWarning = exportMod.otherCombinedWarning ?? (async () => '');   // avant : aucun avertissement
 
 const EXPORT_KEY = 'tetra-walktest.exportLang';
 let freshN = 0;
@@ -792,20 +793,110 @@ await test('Langue des exports : textes dessinés dans le PNG (légende, bandeau
   }
 });
 
-await test('Langue des exports : nom du CSV commun selon la langue, contenu des CSV inchangé', async () => {
+// Décision de Jean (04/11/2026) : les noms de fichiers restent en anglais, quelles que soient les langues.
+await test('Noms de fichiers : CSV commun toujours en anglais, contenu des CSV inchangé', async () => {
   try {
-    assert(combinedCsvName('Plans', 'en') === 'Plans - all floors.csv', combinedCsvName('Plans', 'en'));
-    assert(combinedCsvName('Plans', 'nl') === 'Plans - alle verdiepingen.csv', combinedCsvName('Plans', 'nl'));
-    assert(combinedCsvName('Plans', 'fr') === 'Plans - tous les étages.csv', combinedCsvName('Plans', 'fr'));
+    for (const l of LANGS) {
+      setExportLang(l, false);
+      setLang(l, false);
+      assert(combinedCsvName('Plans') === 'Plans - all floors.csv', `interface et exports en ${l} : ${combinedCsvName('Plans')}`);
+      assert(combinedCsvName('Plans', l) === 'Plans - all floors.csv', `langue ${l} précisée : ${combinedCsvName('Plans', l)}`);
+    }
+    setLang('fr', false);
+    assert(!STRINGS['file.allFloors'], 'file.allFloors encore traduit : le nom ne doit pas dépendre de strings.js');
+    for (const l of LANGS) assert(!/CSV commun|gezamenlijke CSV|combined CSV/.test(STRINGS['title.exportLang'][l]), `infobulle en ${l} : ${STRINGS['title.exportLang'][l]}`);
     setExportLang('nl', false);
-    assert(combinedCsvName('Plans') === 'Plans - alle verdiepingen.csv', 'sans langue précisée : ' + combinedCsvName('Plans'));
     const { project, floor } = await sampleProject();
     const csvFl = floorCsv(floor), csvAll = projectCsv(project);
     setExportLang('en', false);
     assert(floorCsv(floor) === csvFl && projectCsv(project) === csvAll, 'le contenu du CSV dépend de la langue des exports');
     assert(csvFl.slice(1).startsWith(CSV_COLUMNS.join(';')), 'en-têtes du CSV modifiés');
   } finally {
+    setLang('fr', false);
     setExportLang('en', false);
+  }
+});
+
+/** Faux dossier exports/ : `names` à l'intérieur, enregistre tout appel à removeEntry. */
+function exportsHandle(names, failAfter = null) {
+  const removed = [];
+  return {
+    kind: 'directory', name: 'exports', removed,
+    async *values() {
+      for (const [i, name] of names.entries()) {
+        if (i === failAfter) throw new DOMException('refusé', 'NotAllowedError');
+        yield { kind: name.endsWith('/') ? 'directory' : 'file', name: name.replace(/\/$/, '') };
+      }
+      if (failAfter !== null) throw new DOMException('refusé', 'NotAllowedError');
+    },
+    async removeEntry(name) { removed.push(name); },
+  };
+}
+const needsWarningFn = () => assert(typeof exportMod.otherCombinedWarning === 'function', 'otherCombinedWarning() n\'existe pas : aucun contrôle du dossier exports/');
+
+await test('Exports : un autre CSV commun dans exports/ -> avertissement avec ses noms, rien n\'est supprimé', async () => {
+  const dir = exportsHandle([
+    'Plans - Floor -1.png', 'Plans - Floor -1.csv', 'Plans - all floors.csv',   // ce qu'on vient d'écrire
+    'Plans - tous les étages.csv', 'Plans - alle verdiepingen.csv', 'Autre - all floors.csv',
+    'notes - all floors.txt', 'Dossier - all floors.csv/',
+  ]);
+  const names = 'Autre - all floors.csv, Plans - alle verdiepingen.csv, Plans - tous les étages.csv';
+  const fr = await otherCombinedWarning(dir, 'Plans');
+  assert(fr === `Un autre fichier « tous les étages » existe déjà dans exports/ : ${names}. CRG l'ignore, mais pensez à ne pas l'envoyer avec le rapport.`, 'avertissement : ' + (fr || '(aucun)'));
+  try {
+    setExportLang('nl', false);   // le message suit l'interface, pas la langue des exports
+    assert(await otherCombinedWarning(dir, 'Plans') === fr, 'le message suit la langue des exports');
+    setLang('nl', false);
+    const nl = await otherCombinedWarning(dir, 'Plans');
+    assert(nl.includes(`in exports/: ${names}.`) && nl.includes('CRG negeert'), 'NL : ' + nl);
+    setLang('en', false);
+    const en = await otherCombinedWarning(dir, 'Plans');
+    assert(en.includes(`in exports/: ${names}.`) && en.includes('CRG ignores'), 'EN : ' + en);
+  } finally {
+    setLang('fr', false);
+    setExportLang('en', false);
+  }
+  assert(dir.removed.length === 0, 'fichier supprimé : ' + dir.removed.join(', '));
+  // é décomposé (dossier passé par un Mac) : reconnu quand même
+  const nfd = 'Plans - tous les étages.csv';
+  assert((await otherCombinedWarning(exportsHandle([nfd]), 'Plans')).includes(nfd), 'é décomposé non reconnu');
+});
+
+await test('Exports : même nom seulement -> pas d\'avertissement (écrasement normal)', async () => {
+  needsWarningFn();
+  const cases = [
+    ['Plans', ['Plans - Floor -1.csv', 'Plans - all floors.csv']],
+    ['Plans', ['PLANS - ALL FLOORS.CSV']],                 // même fichier sous Windows
+    ['A/B: test', ['A_B_ test - all floors.csv']],         // nom réellement écrit (caractères interdits remplacés)
+    ['Plans', []],
+  ];
+  for (const [project, names] of cases) {
+    const dir = exportsHandle(names), w = await otherCombinedWarning(dir, project);
+    assert(w === '', `${project} / ${names.join(', ')} : ${w}`);
+    assert(dir.removed.length === 0, 'fichier supprimé');
+  }
+});
+
+await test('Exports : dossier illisible -> pas d\'avertissement, pas d\'erreur', async () => {
+  needsWarningFn();
+  for (const failAfter of [0, 1]) {
+    const dir = exportsHandle(['Plans - tous les étages.csv'], failAfter);
+    const w = await otherCombinedWarning(dir, 'Plans');
+    assert(w === '', `échec après ${failAfter} entrée(s) : ${w}`);
+    assert(dir.removed.length === 0, 'fichier supprimé');
+  }
+});
+
+await test('Exports : « tous les étages » prévient après l\'export dans exports/, aucun code ne supprime de fichier', async () => {
+  const app = await (await fetch('../js/app.js')).text();
+  const all = app.slice(app.indexOf(`$('btn-export-all')`), app.indexOf('function renderSaveState'));
+  assert(/otherCombinedWarning\(projectDir, project\.name\)/.test(all), 'l\'export de tous les étages ne contrôle pas exports/');
+  assert(all.indexOf('otherCombinedWarning(') > all.indexOf('writeHandle('), 'contrôle avant l\'écriture des fichiers');
+  // un seul toast : un notify() de succès après l'avertissement l'effacerait
+  assert(/notify\([^\n]*warning[^\n]*'warn'/.test(all) && !/notify\(/.test(all.slice(all.lastIndexOf(`'warn'`))), 'avertissement effacé ou non affiché');
+  assert((await (await fetch('../css/app.css')).text()).includes('.toast.warn'), 'style .toast.warn absent');
+  for (const f of ['app', 'export', 'folder', 'project', 'autosave']) {
+    assert(!(await (await fetch(`../js/${f}.js`)).text()).includes('removeEntry'), `removeEntry dans js/${f}.js`);
   }
 });
 
