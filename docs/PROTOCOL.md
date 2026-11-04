@@ -121,8 +121,22 @@ Juste après le redémarrage, la radio a envoyé sur COM5, avant les réponses `
 `47 72 00 00 00 00 d0 00 08 1b 09 00`, `47 72 00 00 00 00 19 00 08`, `47 72 00 00 00 00 19 00 0d`,
 `47 72 00 00 00 00 d0 00 08 1b 09 01`.
 
+## Perte de service
+
+Ce que fait l'appli : une mesure valide est un bloc qui contient `08` (LA) **et** `09` (RSSI).
+Après 3 s de marche sans mesure valide (pauses exclues), elle ajoute un point « pas de service »
+par seconde manquante, depuis la dernière mesure valide, compté non conforme. Cause enregistrée :
+`noserving` si une trame quelconque est arrivée depuis moins de 3 s, `silent` sinon.
+
+**À confirmer sur un enregistrement de terrain** : ce que la radio envoie réellement sans service
+(blocs sans `08` / `09`, seulement des bursts `len=0x32`, plus rien, ou des blocs `08` + `09` avec
+une dernière valeur répétée ou une valeur sentinelle). Dans ce dernier cas, l'appli y verrait des
+mesures valides et ne détecterait pas la perte de service. Le protocole ci-dessus n'a été relevé
+qu'avec du service : les trames brutes du projet (`floor.raw`) permettront de trancher.
+
 ## Points ouverts
 
+- Comportement de la radio sans service (voir « Perte de service »).
 - Sens exact de `i 01 08`, des IDs de statut, du bloc 93–ae (MER ?).
 - Checksum des blocs `B`.
 - Contenu des bursts MAC `len=0x32` (pas nécessaire pour la couverture).
