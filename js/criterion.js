@@ -46,7 +46,8 @@ export function floorCompliance(floor, c = DEFAULT_CRITERION) {
 
 /**
  * Parts des points, en % (même base que le verdict) ; null sans mesure.
- * noService : points « pas de service » ; below : RSSI sous le dernier seuil de la légende (-98 par défaut).
+ * noService : points « pas de service » ; below : points mesurés sous le dernier seuil de la légende
+ * (-88 par défaut), sans les points « pas de service ».
  */
 export function floorShares(floor, thresholds = DEFAULT_THRESHOLDS) {
   const min = thresholds[thresholds.length - 1].min;
