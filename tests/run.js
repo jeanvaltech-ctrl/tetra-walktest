@@ -3,7 +3,7 @@
 // anonymisée par tools/anonymize_atp.py (identité radio, LA et canaux fictifs).
 import { buildCmd, CMD, Deframer, parseInfo } from '../js/protocol.js';
 import { Radio } from '../js/radio.js';
-import { rssiColor, upgradeThresholds, DEFAULT_THRESHOLDS } from '../js/thresholds.js';
+import { rssiColor, DEFAULT_THRESHOLDS } from '../js/thresholds.js';
 import { Session, floorStats } from '../js/session.js';
 import { FakePort, radioFrame, cmdHex } from './fakeport.js';
 import { parseAtp } from '../js/atp.js';
@@ -11,7 +11,7 @@ import { ViewTransform, metersPerPixel, niceLength } from '../js/geometry.js';
 import { setCalibration, createProject, addFloor, removeFloor, floorSampleCount, serializeProject, deserializeProject } from '../js/project.js';
 import { floorCsv, projectCsv, floorPng, caption, CSV_COLUMNS } from '../js/export.js';
 import { AutoSave } from '../js/autosave.js';
-import { sampleOk, floorCompliance, fmtPct, complianceText } from '../js/criterion.js';
+import { sampleOk, floorCompliance, floorShares, fmtPct, complianceText } from '../js/criterion.js';
 import { readProjectFolder, newPlans, floorNameFromFile, floorNumber, compareFloorNames } from '../js/folder.js';
 import { setLang, t, LANGS } from '../js/i18n.js';
 import { STRINGS } from '../js/strings.js';
@@ -188,16 +188,120 @@ await test('Radio : câble débranché pendant le flux', async () => {
   assert(radio.state === 'disconnected' && radio.port === null, radio.state);
 });
 
-await test('Seuils RSSI : légende SCOUT', () => {
-  // seuils relevés sur un export SCOUT : orange -66/-67 seulement, jaune dès -68
-  const cases = [[-50, '#e00000'], [-65, '#e00000'], [-66, '#ff8c00'], [-67, '#ff8c00'], [-68, '#ffd800'], [-72, '#ffd800'], [-85, '#ffd800'],
-    [-86, '#22b14c'], [-87, '#22b14c'], [-88, '#1e3fd8'], [-98, '#1e3fd8'], [-99, '#000000'], ['', '#000000']];
-  for (const [r, c] of cases) assert(rssiColor(r) === c, `${r} -> ${rssiColor(r)}`);
-  // projet enregistré avec l'ancienne légende par défaut (orange jusqu'à -72) : corrigé à l'ouverture
-  const old = { thresholds: [-65, -72, -85, -87, -98].map((min, i) => ({ min, color: DEFAULT_THRESHOLDS[i].color })) };
-  assert(upgradeThresholds(old) && old.thresholds[1].min === -67, 'ancienne légende non corrigée');
-  const custom = { thresholds: [-60, -70, -80, -90, -100].map(min => ({ min, color: '#123456' })) };
-  assert(!upgradeThresholds(custom) && custom.thresholds[1].min === -70, 'légende personnalisée modifiée');
+// ---------- classes RSSI = classes du rapport CRG (décision de Jean, 04/11/2026) ----------
+const thresholdsMod = await import('../js/thresholds.js');
+// un espace de noms de module est figé : remplaçants au comportement d'avant la correction
+const legendItems = thresholdsMod.legendItems;
+const thresholdsNotice = thresholdsMod.thresholdsNotice ?? (() => '');   // avant : aucun message
+const resetThresholds = thresholdsMod.resetThresholds ?? (p => { p.thresholds = DEFAULT_THRESHOLDS.map(x => ({ ...x })); });
+const renderForLegend = await import('../js/render.js');
+const SCOUT_COLORS = ['#e00000', '#ff8c00', '#ffd800', '#22b14c', '#1e3fd8'];
+const scoutProject = (mins = [-65, -67, -85, -87, -98]) => ({ thresholds: mins.map((min, i) => ({ min, color: SCOUT_COLORS[i] })) });
+
+await test('Seuils RSSI : classes et couleurs du rapport CRG', () => {
+  assert(JSON.stringify(DEFAULT_THRESHOLDS) === JSON.stringify([{ min: -65, color: '#FF0000' }, { min: -75, color: '#FF8C00' }, { min: -85, color: '#FFD700' }, { min: -88, color: '#32CD32' }]),
+    'classes par défaut : ' + JSON.stringify(DEFAULT_THRESHOLDS));
+  assert(thresholdsMod.BELOW?.color === '#0066CC', 'couleur sous le dernier seuil : ' + JSON.stringify(thresholdsMod.BELOW));
+  assert(thresholdsMod.NO_SERVICE?.color === '#000000', 'couleur « pas de service » : ' + JSON.stringify(thresholdsMod.NO_SERVICE));
+  const cases = [[-50, '#FF0000'], [-65, '#FF0000'], [-66, '#FF8C00'], [-75, '#FF8C00'], [-76, '#FFD700'], [-85, '#FFD700'], [-86, '#32CD32'],
+    [-88, '#32CD32'], [-88.0, '#32CD32'], [-88.4, '#0066CC'], [-89, '#0066CC'], [-100, '#0066CC'], [-120, '#0066CC']];
+  for (const [r, c] of cases) assert(rssiColor(r) === c, `${r} -> ${rssiColor(r)}, attendu ${c}`);
+  for (const r of ['', null, undefined, '-70', NaN]) assert(rssiColor(r) === '#000000', `${r} (pas un nombre) -> ${rssiColor(r)}`);
+});
+
+await test('Seuils RSSI : légende ≥ -65 … ≥ -88, < -88, puis « pas de service » sur sa propre ligne', () => {
+  const items = legendItems(DEFAULT_THRESHOLDS);
+  assert(items.map(i => i.label).join(' | ') === '≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88', items.map(i => i.label).join(' | '));
+  assert(items.map(i => i.color).join() === '#FF0000,#FF8C00,#FFD700,#32CD32,#0066CC', items.map(i => i.color).join());
+  // le « < dernier seuil » suit les seuils du projet
+  assert(legendItems([{ min: -70, color: '#123456' }]).at(-1).label === '< -70' && legendItems([{ min: -70, color: '#123456' }]).at(-1).color === '#0066CC', 'dernier seuil personnalisé');
+  for (const [l, want] of [['fr', 'Pas de service'], ['nl', 'Geen service'], ['en', 'No service']]) {
+    const lines = renderForLegend.legendLines(DEFAULT_THRESHOLDS, l);
+    assert(lines.join(' | ') === `≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88 | ${want}`, `${l} : ${lines.join(' | ')}`);
+  }
+});
+
+await test('Seuils RSSI : projet enregistré avec les seuils SCOUT -> gardés à l\'ouverture, message avec ses seuils', async () => {
+  const { project } = await sampleProject();
+  project.thresholds = scoutProject().thresholds;
+  const stored = JSON.stringify(project.thresholds);
+  const back = await deserializeProject(await serializeProject(project));
+  const text = thresholdsNotice(back);
+  assert(JSON.stringify(back.thresholds) === stored, 'seuils modifiés : ' + JSON.stringify(back.thresholds));
+  assert(text === 'Ce projet utilise ses propres seuils RSSI (-65 / -67 / -85 / -87 / -98), différents des seuils par défaut alignés sur CRG (≥ -65 / ≥ -75 / ≥ -85 / ≥ -88). Bouton « Seuils par défaut » pour les remplacer.', 'message : ' + (text || '(aucun)'));
+  assert(JSON.stringify(back.thresholds) === stored, 'seuils modifiés par le message');
+  // ses couleurs ne changent pas non plus : sous -98, toujours le noir de cette légende, pas le bleu CRG
+  const th = back.thresholds;
+  assert(rssiColor(-98, th) === '#1e3fd8' && rssiColor(-99, th) === '#000000', `-98 -> ${rssiColor(-98, th)}, -99 -> ${rssiColor(-99, th)}`);
+  assert(legendItems(th).at(-1).label === '< -98' && legendItems(th).at(-1).color === '#000000', JSON.stringify(legendItems(th).at(-1)));
+  try {
+    for (const l of ['nl', 'en']) {
+      setLang(l, false);
+      const s = thresholdsNotice(back);
+      assert(s.includes('-65 / -67 / -85 / -87 / -98') && s.includes('≥ -65 / ≥ -75 / ≥ -85 / ≥ -88') && s.includes(t('btn.resetThresholds')) && !/\{/.test(s), `${l} : ${s}`);
+    }
+  } finally { setLang('fr', false); }
+});
+
+// Décision de Jean : plus aucune réécriture silencieuse, même pour l'ancienne légende (orange jusqu'à -72).
+// Ce test remplace « corrigé à l'ouverture » de l'ancien test des seuils.
+await test('Seuils RSSI : projet avec l\'ancienne légende -72 -> PAS réécrit, même message', async () => {
+  const old = scoutProject([-65, -72, -85, -87, -98]);
+  const stored = JSON.stringify(old.thresholds);
+  thresholdsMod.upgradeThresholds?.(old);
+  assert(JSON.stringify(old.thresholds) === stored, 'réécrit en silence : ' + JSON.stringify(old.thresholds));
+  assert(thresholdsNotice(old).includes('-65 / -72 / -85 / -87 / -98'), 'message : ' + (thresholdsNotice(old) || '(aucun)'));
+  assert(JSON.stringify(old.thresholds) === stored, 'seuils modifiés par le message');
+  const app = await (await fetch('../js/app.js')).text();
+  const show = app.slice(app.indexOf('async function showProject'), app.indexOf('/** Affiche un étage'));
+  assert(!app.includes('upgradeThresholds') && !app.includes('legendUpgraded'), 'app.js réécrit encore les seuils à l\'ouverture');
+  assert(/thresholdsNotice\(project\)/.test(show), 'showProject ne prévient pas : ' + show);
+  assert(!STRINGS['notify.legendUpgraded'], 'message « légende corrigée » encore présent');
+});
+
+await test('Seuils RSSI : message seulement si les seuils diffèrent du défaut (seuils ou couleurs)', () => {
+  assert(thresholdsNotice({ thresholds: DEFAULT_THRESHOLDS.map(x => ({ ...x })) }) === '', 'défaut : pas de message');
+  assert(thresholdsNotice(createProject({ name: 'x' })) === '', 'nouveau projet : pas de message');
+  assert(thresholdsNotice({}) === '', 'projet sans seuils enregistrés : il utilise le défaut, pas de message');
+  assert(thresholdsNotice({ thresholds: DEFAULT_THRESHOLDS.map(x => ({ ...x, color: x.color.toLowerCase() })) }) === '', 'même couleur en minuscules : pas de message');
+  const hasNotice = th => thresholdsNotice({ thresholds: th }) !== '';
+  assert(hasNotice(DEFAULT_THRESHOLDS.map((x, i) => ({ ...x, min: i ? x.min : -60 }))), 'un seuil différent : message');
+  assert(hasNotice(DEFAULT_THRESHOLDS.map((x, i) => ({ ...x, color: i ? x.color : '#123456' }))), 'une couleur différente : message');
+  assert(hasNotice(DEFAULT_THRESHOLDS.slice(0, 3)), 'moins de classes : message');
+  assert(hasNotice([...DEFAULT_THRESHOLDS, { min: -98, color: '#123456' }]), 'plus de classes : message');
+});
+
+await test('Seuils RSSI : le bouton « Seuils par défaut » applique le nouveau défaut', async () => {
+  const p = scoutProject();
+  resetThresholds(p);
+  assert(p.thresholds.map(x => x.min).join() === '-65,-75,-85,-88' && p.thresholds.map(x => x.color).join() === '#FF0000,#FF8C00,#FFD700,#32CD32', JSON.stringify(p.thresholds));
+  assert(p.thresholds[0] !== DEFAULT_THRESHOLDS[0], 'copie attendue : le défaut ne doit pas être modifiable depuis un projet');
+  assert(thresholdsNotice(p) === '', 'message après remise au défaut');
+  const app = await (await fetch('../js/app.js')).text();
+  const handler = app.slice(app.indexOf(`$('btn-thresholds-reset')`), app.indexOf('// ---------- radio ----------'));
+  assert(/resetThresholds\(state\.project\)/.test(handler), 'le bouton n\'appelle pas resetThresholds : ' + handler);
+  const html = document.createElement('div');
+  html.innerHTML = await (await fetch('../index.html')).text();
+  const key = html.querySelector('#btn-thresholds-reset').dataset.i18n;
+  assert(STRINGS[key].fr === 'Seuils par défaut', `libellé du bouton : ${STRINGS[key].fr}`);
+  assert(key === 'btn.resetThresholds' && !STRINGS['btn.resetScout'], `clé ${key}`);
+  assert(!/background:#000"><\/span><span>&lt;/.test(app) && !app.includes(': No<'), 'panneau des seuils : « < dernier seuil » encore en noir « No »');
+});
+
+await test('Bandeau : « < -88 dBm » = points mesurés sous le dernier seuil, pas de service à part', async () => {
+  const { project } = await sampleProject();
+  // règle de docs/CSV.md : les autres parts sont tronquées ; 238/297 = 80,13… -> 80,1, à côté de non conforme = 100 - 19,8
+  const cap = caption(project, countsFloor(59, 297), 'fr');
+  assert(cap.includes('19,8 % des points') && cap.includes('non conforme : 80,2 %') && cap.includes('pas de service : 0,0 %') && cap.includes('< -88 dBm : 80,1 %'), cap);
+  assert(caption(project, countsFloor(59, 297), 'en').includes('< -88 dBm: 80.1 %'), caption(project, countsFloor(59, 297), 'en'));
+  // -88 pile : conforme, donc pas « sous » ; le point sans service n'y compte pas
+  const fl = countsFloor(4, 4), s = fl.segments[0].samples;
+  s[0].rssi = -70; s[1].rssi = -88; s[2].rssi = -89; Object.assign(s[3], { rssi: '', noService: 'noserving' });
+  const sh = floorShares(fl, DEFAULT_THRESHOLDS);
+  assert(sh.below === 25 && sh.noService === 25, JSON.stringify(sh));
+  // un projet qui garde ses seuils garde aussi son dernier seuil dans le bandeau
+  project.thresholds = scoutProject().thresholds;
+  assert(caption(project, countsFloor(1, 3, -120), 'fr').includes('< -98 dBm : 66,6 %'), caption(project, countsFloor(1, 3, -120), 'fr'));
 });
 
 // ---------- session par waypoints (M3) ----------
@@ -380,7 +484,7 @@ await test('Fichier projet : enregistrer puis rouvrir à l\'identique', async ()
   const json = await serializeProject(project);
   const back = await deserializeProject(json);
   const fl = back.floors[0], src = project.floors[0];
-  assert(back.name === project.name && back.thresholds.length === 5, 'en-tête');
+  assert(back.name === project.name && back.thresholds.length === 4, 'en-tête');
   assert(JSON.stringify(fl.segments) === JSON.stringify(src.segments), 'segments différents');
   assert(JSON.stringify(fl.calibration) === JSON.stringify(src.calibration) && fl.raw.length === 1, 'calibration / trames');
   assert(fl.image.blob.size === src.image.blob.size && fl.image.blob.type === 'image/png', `image ${fl.image.blob.size} / ${src.image.blob.size}`);
@@ -400,12 +504,12 @@ await test('Export PNG : taille, trace colorée, bandeau', async () => {
   const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
   g.drawImage(bmp, 0, 0);
   const px = (x, y) => [...g.getImageData(x, y, 1, 1).data.slice(0, 3)].join(',');
-  assert(px(150, 150) === '224,0,0', `rouge attendu à -60 dBm : ${px(150, 150)}`);
-  assert(px(250, 150) === '30,63,216', `bleu attendu à -95 dBm : ${px(250, 150)}`);
+  assert(px(150, 150) === '255,0,0', `rouge attendu à -60 dBm : ${px(150, 150)}`);
+  assert(px(250, 150) === '0,102,204', `bleu attendu à -95 dBm : ${px(250, 150)}`);
   assert(px(5, bmp.height - 5) === '241,243,245', `bandeau : ${px(5, bmp.height - 5)}`);
   // la trace va jusqu'aux points cliqués : près de l'extrémité droite du tronçon (350,150), du bleu
   // (avant, la dernière mesure s'arrêtait à mi-chemin, vers x = 300)
-  assert(px(338, 150) === '30,63,216', `fin de tronçon : ${px(338, 150)}`);
+  assert(px(338, 150) === '0,102,204', `fin de tronçon : ${px(338, 150)}`);
   assert(caption(project, floor).includes('3 mesures'), caption(project, floor));
 });
 
@@ -494,7 +598,7 @@ await test('Pas de service : compté NON conforme dans le % ASTRID (points)', ()
   // % des points (fait foi) : 20 points conformes sur ~50, les points « pas de service » comptent non conformes
   assert(Math.abs(r.pct - r.okN / r.n * 100) < 1e-9 && r.pct > 38 && r.pct < 42 && r.ok === false, `ASTRID ${r.pct} % des points, conforme : ${r.ok}`);
   assert(r.pctDistance > 55 && r.pctDistance < 72, `distance ${r.pctDistance}`);
-  assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part de distance « pas de service » / « < -98 ») n\'existe pas');
+  assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part « pas de service » / sous le dernier seuil) n\'existe pas');
   const sh = criterionMod.floorShares(noServiceWalk(), DEFAULT_THRESHOLDS);
   assert(sh.noService > 56 && sh.noService < 62 && sh.below === 0, 'parts en % des points : ' + JSON.stringify(sh));
 });
@@ -549,7 +653,7 @@ await test('Pas de service : export CSV et PNG (trace noire à tirets, légende,
   const centre = [...Array(40)].map((_, i) => px(170 + i, 150));
   assert(centre.includes('255,255,255') && centre.includes('0,0,0'), 'tirets blancs absents : ' + [...new Set(centre)].join(' / '));
   const cap = caption(project, floor);
-  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && /< -98 dBm/.test(cap), cap);
+  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && /< -88 dBm/.test(cap), cap);
   for (const l of LANGS) assert(STRINGS['legend.noService'] && STRINGS['legend.noService'][l], `légende « pas de service » en ${l}`);
 });
 
@@ -736,7 +840,7 @@ await test('Langue des exports : interface FR, réglage par défaut -> légende 
   const cap = caption(project, floor, lang);
   assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
   assert(/without service/.test(cap) && /ASTRID: \d+\.\d % of points/.test(cap) && /NOT compliant \(target 95 %\)/.test(cap), cap);
-  assert(/distance walked/.test(cap) && /no service: \d+\.\d %/.test(cap) && /< -98 dBm: \d+\.\d %/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
+  assert(/distance walked/.test(cap) && /no service: \d+\.\d %/.test(cap) && /< -88 dBm: \d+\.\d %/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
   assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
 });
 
@@ -747,7 +851,7 @@ await test('Langue des exports : NL -> légende et bandeau en néerlandais, inte
   const cap = caption(project, floor, 'nl');
   assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
   assert(/zonder service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
-  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && /< -98 dBm: \d+,\d %/.test(cap), cap);
+  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && /< -88 dBm: \d+,\d %/.test(cap), cap);
   assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
 });
 
@@ -946,9 +1050,9 @@ await test('Pourcentages : verdict et troncature sans erreur de virgule flottant
   assert(floorCompliance(fl, { rssi: -88, percent: 29 }).ok === true, '29/100 pour un objectif de 29 % : verdict sur les comptes exacts');
   assert(fmtPct(floorCompliance(fl).pct) === '29,0 %', `29/100 affiché ${fmtPct(floorCompliance(fl).pct)}`);
   const { project } = await sampleProject();
-  // 1 point conforme, 2 sous -98 dBm : 66,66… % tronqué à 66,6 (pas 66,7), non conforme = 100 - 33,3
+  // 1 point conforme, 2 sous -88 dBm : 66,66… % tronqué à 66,6 (pas 66,7), non conforme = 100 - 33,3
   const cap = caption(project, countsFloor(1, 3, -120), 'fr');
-  assert(cap.includes('< -98 dBm : 66,6 %') && cap.includes('non conforme : 66,7 %'), cap);
+  assert(cap.includes('< -88 dBm : 66,6 %') && cap.includes('non conforme : 66,7 %'), cap);
 });
 
 const ko = results.filter(r => !r.ok).length;
