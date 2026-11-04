@@ -70,6 +70,27 @@ un niveau trop faible. Un RSSI vide n'est pas une valeur nulle : ne jamais le li
 `astrid_ok` applique le critère enregistré dans le projet ; le seuil peut donc différer de -88 dBm
 si l'utilisateur l'a modifié.
 
+## Classes de RSSI
+
+Depuis le 04/11/2026 (décision de Jean), les classes par défaut de Walk-Test (trace, légende, panneau
+live, PNG) sont celles du rapport CRG, avec les mêmes couleurs. Le CSV n'écrit ni classe ni couleur :
+le lecteur les déduit de `rssi` et `no_service`.
+
+| Classe | RSSI (dBm) | Couleur |
+|---|---|---|
+| Excellent | ≥ -65 | `#FF0000` |
+| Very good | -65 → -75 (`rssi` ≥ -75) | `#FF8C00` |
+| Good | -75 → -85 (`rssi` ≥ -85) | `#FFD700` |
+| Acceptable | -85 → -88 (`rssi` ≥ -88) | `#32CD32` |
+| Bad | < -88, y compris < -100 | `#0066CC` |
+| No service | pas de RSSI (`no_service` = 1) | `#000000` |
+
+La borne basse d'une classe en fait partie : **-88 dBm pile est vert**, -89 est bleu. La comparaison
+`>=` porte sur le nombre tel quel : une valeur fractionnaire n'est pas arrondie, -88,4 serait bleu (la
+radio n'envoie que des entiers).
+
+Un projet qui a enregistré d'autres seuils les garde : ses classes peuvent alors différer de ce tableau.
+
 ## Pourcentages et verdict
 
 Règle validée par Jean le 04/11/2026.
@@ -90,3 +111,9 @@ Base : les **points** du CSV (`total` = nombre de lignes, `ok` = lignes avec `as
 | 19 / 20 | 95 % | 95,0 % | 5,0 % | conforme |
 
 Même règle dans Walk-Test (panneaux, bandeau du PNG) et dans CRG 2.6.3.
+
+Le bandeau du PNG donne aussi « < dernier seuil » : les points **mesurés** sous le dernier seuil, sans
+les points « pas de service ». Avec les seuils et le critère par défaut, ce sont les points non conformes
+qui ont un RSSI. Tronquée (règle 4), cette part peut afficher 0,1 ou 0,2 de moins que `non conforme -
+pas de service` : pour 59 / 297 sans point « pas de service », `non conforme : 80,2 %` et
+`< -88 dBm : 80,1 %` (238 / 297 = 80,13… %).

@@ -57,7 +57,7 @@ en anglais.
 **Pas de service** : après 3 s de marche sans mesure valide de la cellule serveuse (pauses
 exclues), l'appli ajoute un point « pas de service » par seconde manquante, depuis la dernière
 mesure valide. Ils sont tracés en noir à tirets blancs et comptent **non conformes**, comme un
-niveau sous -98 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
+niveau sous -88 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
 reçue : vérifier la radio ».
 
 ### Dossier projet (recommandé)
@@ -111,6 +111,18 @@ Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ». 
 tranchée : -88 dBm s'applique ici radio portée (perte corporelle incluse), alors que l'Annexe 6 de
 la convention ASTRID donne -98 dBm pour une mesure radio portée.
 
+### Classes de RSSI
+
+Par défaut, les classes et les couleurs sont celles du rapport CRG
+([tableau](docs/CSV.md#classes-de-rssi)) : ≥ -65 rouge, ≥ -75 orange, ≥ -85 jaune, ≥ -88 vert, en dessous
+bleu ; « pas de service » garde sa ligne dans la légende, en noir à tirets blancs.
+
+Un projet qui a enregistré d'autres seuils les garde, avec ses couleurs : l'appli ne les réécrit jamais et
+affiche un message à l'ouverture. Le bouton « **Seuils par défaut** » les remplace. L'ancienne légende
+SCOUT reste possible en saisissant ses seuils (-65 / -67 / -85 / -87), mais avec les quatre champs et les
+couleurs CRG : tout ce qui est plus bas est bleu. Ses classes bleu jusqu'à -98 et noir en dessous
+n'existent plus que dans les projets qui les ont déjà enregistrées.
+
 ### Enregistrer et exporter
 
 - **Enregistrer** (Ctrl+S) : un fichier `<projet>.walktest.json` contient tout le projet (plans,
@@ -123,8 +135,8 @@ la convention ASTRID donne -98 dBm pour une mesure radio portée.
   Contrat complet, lu par CRG : [`docs/CSV.md`](docs/CSV.md).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
   (projet, étage, horaire, nombre de points, verdict ASTRID en % des points avec la distance
-  parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -98 dBm : z % »
-  des points, ISSI de la radio), dans la langue des exports.
+  parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -88 dBm : z % »
+  des points, ce dernier suivant le dernier seuil du projet, ISSI de la radio), dans la langue des exports.
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
   un CSV commun trié par heure, toujours nommé `<projet> - all floors.csv`, quelle que soit la langue
   (CRG reconnaît aussi les anciens noms `tous les étages` et `alle verdiepingen`). Aucun fichier n'est
@@ -187,7 +199,7 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `js/strings.js` | **tous les textes de l'interface, FR / NL / EN côte à côte** (à relire / compléter ici) |
 | `js/i18n.js` | choix de la langue, traduction (`t()`), formatage des nombres |
 | `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
-| `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
+| `js/thresholds.js` | seuils RSSI et couleurs (classes du rapport CRG) |
 | `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |
 | `js/atp.js` | lecture des fichiers SCOUT `.atp` |
 | `js/simport.js` | radio simulée (`?demo`) |
