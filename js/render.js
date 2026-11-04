@@ -1,13 +1,14 @@
 // render.js — dessin de la trace, de la légende et de l'échelle.
 // Commun à l'écran (transformation de la vue) et à l'export PNG (taille réelle du plan).
 // k : facteur d'épaisseur / de taille de texte (1 à l'écran, plus grand à l'export).
+// lang : langue des textes dessinés (à l'export) ; absente, celle de l'interface (à l'écran).
 import { niceLength } from './geometry.js';
 import { legendItems, rssiColor } from './thresholds.js';
-import { nf, t as tr } from './i18n.js';
+import { nf, tx } from './i18n.js';
 
 export { nf };   // formatage des nombres selon la langue choisie
 export const FONT = 'system-ui, "Segoe UI", sans-serif';
-export const fmtMeters = m => m >= 1 ? `${nf(m, m < 10 ? 1 : 0)} m` : `${nf(m * 100)} cm`;
+export const fmtMeters = (m, lang) => m >= 1 ? `${nf(m, m < 10 ? 1 : 0, lang)} m` : `${nf(m * 100, 0, lang)} cm`;
 
 export function drawLabel(ctx, text, x, y) {
   ctx.font = `600 12px ${FONT}`;
@@ -79,9 +80,13 @@ export function drawTrace(ctx, t, floor, thresholds, k = 1) {
 
 export const LEGEND_W = 118;
 
+/** Textes de la légende : classes de RSSI (sans langue), puis « pas de service » dans la langue demandée. */
+export const legendLines = (thresholds, lang) =>
+  [...legendItems(thresholds).map(it => it.label), tx(lang, 'legend.noService')];
+
 /** Légende RSSI, coin haut-gauche en (x, y). */
-export function drawLegend(ctx, x, y, thresholds, k = 1) {
-  const items = legendItems(thresholds), lh = 16, top = 24, h = (items.length + 1) * lh + top;
+export function drawLegend(ctx, x, y, thresholds, k = 1, lang) {
+  const items = legendItems(thresholds), lines = legendLines(thresholds, lang), lh = 16, top = 24, h = (items.length + 1) * lh + top;
   ctx.save();
   ctx.translate(x, y); ctx.scale(k, k);
   ctx.fillStyle = 'rgba(255,255,255,.92)';
@@ -95,19 +100,19 @@ export function drawLegend(ctx, x, y, thresholds, k = 1) {
   items.forEach((it, i) => {
     const yy = top + i * lh;
     ctx.fillStyle = it.color; ctx.fillRect(8, yy + 2, 14, lh - 6);
-    ctx.fillStyle = '#111'; ctx.fillText(it.label, 30, yy + lh / 2 - 1);
+    ctx.fillStyle = '#111'; ctx.fillText(lines[i], 30, yy + lh / 2 - 1);
   });
   // « pas de service » : sa propre ligne, distincte de « < -98 (No) »
   const yy = top + items.length * lh, mid = yy + 2 + (lh - 6) / 2;
   ctx.fillStyle = '#000'; ctx.fillRect(8, yy + 2, 14, lh - 6);
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.setLineDash([3, 2.5]);
   ctx.beginPath(); ctx.moveTo(8, mid); ctx.lineTo(22, mid); ctx.stroke();
-  ctx.fillStyle = '#111'; ctx.fillText(tr('legend.noService'), 30, yy + lh / 2 - 1, LEGEND_W - 34);
+  ctx.fillStyle = '#111'; ctx.fillText(lines[items.length], 30, yy + lh / 2 - 1, LEGEND_W - 34);
   ctx.restore();
 }
 
 /** Barre d'échelle « ronde » d'environ 120 px (× k), extrémité gauche de la barre en (x, y). */
-export function drawScaleBar(ctx, t, mPerPx, x, y, k = 1) {
+export function drawScaleBar(ctx, t, mPerPx, x, y, k = 1, lang) {
   const L = niceLength(120 * k / t.s * mPerPx);
   const w = L / mPerPx * t.s;
   ctx.save();
@@ -118,6 +123,6 @@ export function drawScaleBar(ctx, t, mPerPx, x, y, k = 1) {
   ctx.fillRect(x, y - 6 * k, 2 * k, 10 * k); ctx.fillRect(x + w - 2 * k, y - 6 * k, 2 * k, 10 * k);
   ctx.font = `${12 * k}px ${FONT}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(fmtMeters(L), x + w / 2, y - 6 * k);
+  ctx.fillText(fmtMeters(L, lang), x + w / 2, y - 6 * k);
   ctx.restore();
 }
