@@ -11,7 +11,7 @@ import { DEFAULT_THRESHOLDS } from './thresholds.js';
 // astrid_ok : 1 si le RSSI respecte le critère ASTRID du projet (≥ -88 dBm par défaut), sinon 0.
 // no_service : 1 sur un point « pas de service » (cellules de mesure vides, astrid_ok à 0), sinon 0.
 // CRG lit ces colonnes : ajouter à la fin, ne jamais renommer ni réordonner (contrat : docs/CSV.md).
-// Le contenu du CSV ne dépend d'aucune langue ; seul le nom du CSV commun suit la langue des exports.
+// Le contenu du CSV ne dépend d'aucune langue, le nom des fichiers non plus.
 export const CSV_COLUMNS = ['date', 'time', 'floor', 'segment', 'x', 'y', 'x_m', 'y_m', 'la', 'channel', 'rssi', 'c1',
   ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`]), 'astrid_ok', 'no_service'];
 
@@ -55,8 +55,8 @@ export const floorCsv = (floor, criterion = DEFAULT_CRITERION) => csvText(csvLin
 export const projectCsv = project =>
   csvText(project.floors.flatMap(f => csvLines(f, project.criterion || DEFAULT_CRITERION)).sort((a, b) => a.time - b.time));
 
-/** Nom du CSV de tous les étages, dans la langue des exports. */
-export const combinedCsvName = (projectName, lang = getExportLang()) => `${projectName} - ${tx(lang, 'file.allFloors')}.csv`;
+/** Nom du CSV de tous les étages : toujours en anglais, comme tous les noms de fichiers. */
+export const combinedCsvName = projectName => `${projectName} - all floors.csv`;
 
 /** Texte du bandeau sous le plan exporté, dans la langue demandée (floorPng : la langue des exports). */
 export function caption(project, floor, lang = getLang()) {

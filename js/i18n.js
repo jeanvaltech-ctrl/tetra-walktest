@@ -1,7 +1,7 @@
 // i18n.js — langue de l'interface (FR / NL / EN), langue des exports et formatage des nombres.
 // Langue de l'interface : choix mémorisé, sinon celle du navigateur (nl → NL, fr → FR, sinon EN).
-// Langue des exports : ce qui est écrit dans les PNG et le nom du CSV commun ; anglais par défaut,
-// mémorisée à part (préférence du poste, comme la langue de l'interface, pas dans le fichier projet).
+// Langue des exports : ce qui est écrit dans les PNG (les noms de fichiers restent en anglais) ; anglais
+// par défaut, mémorisée à part (préférence du poste, comme la langue de l'interface, pas dans le fichier projet).
 // Les textes sont dans strings.js ; dans le HTML, data-i18n="clé" (texte), data-i18n-title,
 // data-i18n-placeholder, data-i18n-aria (aria-label) et data-i18n-value (valeur d'un champ).
 import { STRINGS } from './strings.js';
