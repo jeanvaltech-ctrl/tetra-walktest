@@ -1,7 +1,7 @@
 // app.js — point d'entrée de l'interface.
 import { PlanView } from './planview.js';
 import { createProject, addFloor, removeFloor, floorSampleCount, setCalibration, clearCalibration, serializeProject, deserializeProject } from './project.js';
-import { floorCsv, projectCsv, floorPng, fileSafe } from './export.js';
+import { floorCsv, projectCsv, floorPng, fileSafe, combinedCsvName } from './export.js';
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
@@ -12,7 +12,7 @@ import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
 import { DEFAULT_CRITERION, sampleOk, floorCompliance, fmtPct } from './criterion.js';
 import { nf, fmtMeters, drawLabel, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
-import { t, applyDom, setLang, getLang, locale } from './i18n.js';
+import { t, applyDom, setLang, getLang, locale, getExportLang, setExportLang } from './i18n.js';
 
 const $ = id => document.getElementById(id);
 
@@ -525,7 +525,7 @@ $('btn-export-all').addEventListener('click', () => runFileAction(async () => {
   const files = project.floors.flatMap(fl => [
     { name: `${base}${fl.name}.png`, make: async () => floorPng(project, fl, await floorBitmap(fl)) },
     { name: `${base}${fl.name}.csv`, make: async () => new Blob([floorCsv(fl, project.criterion)], { type: 'text/csv' }) },
-  ]).concat({ name: `${base}${t('file.allFloors')}.csv`, make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
+  ]).concat({ name: combinedCsvName(project.name), make: async () => new Blob([projectCsv(project)], { type: 'text/csv' }) });
   for (const [i, f] of files.entries()) {
     notify(t('notify.exportProgress', { i: i + 1, n: files.length }), 'busy', 0);
     const blob = await f.make(), name = fileSafe(f.name);
@@ -1155,6 +1155,9 @@ document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click'
   if (wasReady) setStatus(t('status.ready'));
   applyLanguage();
 }));
+// langue des exports : indépendante de celle de l'interface (les PNG partent dans le rapport)
+$('export-lang').value = getExportLang();
+$('export-lang').addEventListener('change', e => setExportLang(e.target.value));
 // le nom d'étage par défaut suit la langue tant qu'on ne l'a pas modifié
 $('form-new').floor.addEventListener('input', e => { e.target.dataset.touched = '1'; });
 $('form-new').addEventListener('reset', () => setTimeout(() => {
