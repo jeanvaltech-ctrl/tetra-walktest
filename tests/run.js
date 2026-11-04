@@ -541,6 +541,92 @@ await test('Pas de service : export CSV et PNG (trace noire à tirets, légende,
   for (const l of LANGS) assert(STRINGS['legend.noService'] && STRINGS['legend.noService'][l], `légende « pas de service » en ${l}`);
 });
 
+await test('Pas de service : aucun point en pause, avant Démarrer ni après Fin', () => {
+  let now = 0;
+  const floor = { segments: [] }, s = new Session(floor, () => now);
+  const ns = () => floor.segments.flatMap(g => g.samples).concat(s.pending).filter(x => x.noService).length;
+  now = 10000; s.checkService(now, 'noserving');                 // avant Démarrer
+  s.start(); now = 20000; s.checkService(now, 'noserving');      // démarré, pas encore de point de départ
+  assert(ns() === 0, `${ns()} point(s) avant le point de départ`);
+  now = 20000; s.click({ x: 0, y: 0 });
+  now = 21000; s.addSample({ la: 1001, rssi: -70 }, now);
+  now = 22000; s.pause();
+  for (now = 23000; now <= 80000; now += 1000) s.checkService(now, 'noserving');   // 58 s de pause
+  assert(ns() === 0, `${ns()} point(s) pendant la pause`);
+  now = 80000; s.resume();
+  now = 81000; s.addSample({ la: 1001, rssi: -70 }, now);
+  now = 81500; s.click({ x: 50, y: 0 });
+  assert(ns() === 0, `${ns()} point(s) à la reprise (la pause compte comme un trou)`);
+  s.stop();
+  for (now = 82000; now <= 200000; now += 1000) s.checkService(now, 'silent');      // après Fin
+  assert(ns() === 0, `${ns()} point(s) après Fin`);
+});
+
+await test('Pas de service : fenêtre réduite (minuteur freiné), détection sur l\'horodatage des trames', () => {
+  // A. service normal, mesures chaque seconde, mais le contrôle ne passe qu'une fois par minute
+  let now = 0;
+  const fa = { segments: [] }, a = new Session(fa, () => now);
+  a.start(); a.click({ x: 0, y: 0 });
+  for (now = 1000; now <= 120000; now += 1000) {
+    a.noteFrame?.(now);
+    a.addSample({ la: 1001, rssi: -70 }, now);
+    if (now % 60000 === 0) a.checkService(now, 'noserving');
+  }
+  now = 120500; a.click({ x: 100, y: 0 });
+  const falseNs = fa.segments[0].samples.filter(x => x.noService).length;
+  assert(falseNs === 0, `${falseNs} faux point(s) « pas de service » avec un minuteur freiné`);
+  // B. 40 s sans serveuse (trames de voisines toutes les 0,5 s) ; le minuteur ne passe qu'APRÈS le retour du service
+  now = 0;
+  const fb = { segments: [] }, b = new Session(fb, () => now);
+  b.start(); b.click({ x: 0, y: 0 });
+  for (now = 500; now <= 60000; now += 500) {
+    b.noteFrame?.(now);
+    const covered = now <= 10000 || now > 50000;
+    if (covered && now % 1000 === 0) b.addSample({ la: 1001, rssi: -70 }, now);
+  }
+  b.checkService(60000, 'noserving');
+  now = 60500; b.click({ x: 100, y: 0 });
+  const nsb = fb.segments[0].samples.filter(x => x.noService);
+  assert(nsb.length >= 38 && nsb.length <= 40, `${nsb.length} point(s) « pas de service » pour un trou de 40 s vu en retard (attendu ~39)`);
+  assert(nsb.every(x => x.noService === 'noserving'), 'cause : ' + [...new Set(nsb.map(x => x.noService))].join(','));
+  assert(nsb.every(x => x.ta > 10000 && x.ta < 51000), 'points hors du trou');
+});
+
+await test('Veille du portable : saut d\'horloge sans trame -> pause automatique, aucun point', () => {
+  let now = 0;
+  const floor = { segments: [] }, s = new Session(floor, () => now);
+  s.start(); s.click({ x: 0, y: 0 });
+  for (now = 1000; now <= 5000; now += 1000) { s.noteFrame?.(now); s.addSample({ la: 1001, rssi: -70 }, now); s.checkService(now, 'noserving'); }
+  now = 65000;                                     // réveil : 60 s plus tard, aucune trame entre-temps
+  assert(s.pause(5000) && s.state === 'paused', 'pas de pause automatique');
+  now = 66000; s.resume();
+  for (now = 67000; now <= 70000; now += 1000) { s.noteFrame?.(now); s.addSample({ la: 1001, rssi: -70 }, now); s.checkService(now, 'noserving'); }
+  now = 70500; s.click({ x: 100, y: 0 });
+  const ns = floor.segments[0].samples.filter(x => x.noService).length;
+  assert(ns === 0, `${ns} point(s) « pas de service » pour la veille`);
+  assert(floor.segments[0].samples.at(-1).x > 90, 'temps de veille non exclu (pause datée du dernier contrôle)');
+  assert(sessionMod.FREEZE_MS === 10000, `FREEZE_MS ${sessionMod.FREEZE_MS}`);
+  assert(typeof sessionMod.isFreeze === 'function', 'isFreeze() n\'existe pas');
+  assert(sessionMod.isFreeze(5000, 65000, 5000) === true, 'veille non détectée');
+  assert(sessionMod.isFreeze(5000, 65000, 64000) === false, 'minuteur freiné mais trames reçues : pas une veille');
+  assert(sessionMod.isFreeze(5000, 9000, 5000) === false, 'retard de 4 s : pas une veille');
+});
+
+await test('Pas de service : compteurs « N points dont M sans service » et texte ASTRID du panneau', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  const all = floor.segments[0].samples.length, ns = floor.segments[0].samples.filter(x => x.noService).length;
+  assert(caption(project, floor).includes(`${all} points dont ${ns} sans service`), caption(project, floor));
+  assert(t('floor.count', { n: all, ns }) === `${all} points dont ${ns} sans service`, t('floor.count', { n: all, ns }));
+  assert(t('floor.count', { n: 3, ns: 0 }) === '3 mesures', 'sans perte de service, le libellé ne change pas');
+  for (const l of ['nl', 'en']) {
+    setLang(l, false);
+    assert(!/undefined|\{/.test(t('floor.count', { n: all, ns })) && t('floor.count', { n: all, ns }).includes(String(ns)), `${l} : ${t('floor.count', { n: all, ns })}`);
+  }
+  setLang('fr', false);
+  assert(/distance parcourue/.test(t('stats.goal', { goal: 95, points: '80,0 %' })), 'panneau Mesure : ' + t('stats.goal', { goal: 95, points: '80,0 %' }));
+});
+
 // ---------- langues ----------
 await test('Langues : chaque texte existe en FR, NL et EN', () => {
   const missing = Object.entries(STRINGS).flatMap(([k, e]) => LANGS.filter(l => !(l in e)).map(l => `${k}:${l}`));
