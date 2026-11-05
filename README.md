@@ -32,7 +32,7 @@ Le « Port 2 » est l'interface AT de la radio et ne répond pas.
 
 Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée). Pour montrer une zone
 sans couverture (~10 s toutes les ~40 s) : `?demo=noservice` (trames sans cellule serveuse) ou
-`?demo=silent` (plus aucune trame).
+`?demo=silent` (plus aucune trame : la mesure passe en pause, voir « Radio muette » ci-dessous).
 
 **Langue** : français, néerlandais ou anglais (boutons FR | NL | EN en haut à droite). Par défaut,
 la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
@@ -51,14 +51,26 @@ contenu des CSV ne change jamais et les noms de fichiers restent en anglais.
    clics sont réparties sur le tronçon, au prorata du temps (pauses exclues).
 4. « Pause » (ou barre d'espace) : les mesures ne sont plus enregistrées.
    « Annuler le point » (Ctrl+Z) : retire le dernier clic, ses mesures seront replacées au suivant.
+   « Jeter les mesures en attente » : après confirmation du nombre, oublie les mesures reçues depuis
+   le dernier clic (elles ne seront pas placées) ; ce qui est déjà sur le plan ne change pas.
 5. « Fin de segment » / « Terminer » : cliquer d'abord le dernier point, sinon les mesures
    reçues depuis le dernier clic sont perdues (l'appli demande confirmation).
 
 **Pas de service** : après 3 s de marche sans mesure valide de la cellule serveuse (pauses
-exclues), l'appli ajoute un point « pas de service » par seconde manquante, depuis la dernière
-mesure valide. Ils sont tracés en noir à tirets blancs et comptent **non conformes**, comme un
-niveau sous -88 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
-reçue : vérifier la radio ».
+exclues), alors que la radio continue d'envoyer des trames, l'appli ajoute un point « pas de
+service » par seconde manquante, depuis la dernière mesure valide. Ils sont tracés en noir à tirets
+blancs et comptent **non conformes**, comme un niveau sous -88 dBm.
+
+**Radio muette** : une vraie zone morte ne fait pas taire la radio. Plus aucune trame depuis 3 s
+n'est donc jamais compté sans confirmation : la mesure passe **en pause, datée de la dernière trame
+reçue**, sans aucun point. L'appli affiche « Aucune trame reçue : vérifier la radio » et, dans le
+panneau Mesure, le bouton **« Compter ce silence comme No service »** : la mesure reprend et le silence
+reçoit un point par seconde, placés au clic suivant. « Reprendre » reprend sans compter ce silence.
+Un silence découvert seulement après coup n'est pas compté non plus (message « Radio silencieuse
+{n} s : non comptée »), et la marche continue.
+
+**Veille du portable** (capot fermé) : si la page est cachée et la radio muette, même pause, sans
+bouton. Au retour, un message indique l'heure de la pause : reprendre au dernier point cliqué.
 
 ### Dossier projet (recommandé)
 
@@ -150,13 +162,13 @@ les classes CRG.
   coupure, l'écran d'accueil propose **« Reprendre ce projet »** : une mesure en cours revient
   **en pause au dernier point cliqué**, avec ses mesures en attente. Elle ne remplace pas
   « Enregistrer » : elle est liée à ce navigateur et à cette adresse, et ne garde qu'un projet.
-- **Câble arraché** : la mesure passe en pause. Un câble arraché en plein flux **bloque la radio**
+- **Câble arraché** : la mesure passe en pause, datée de la dernière trame reçue. Un câble arraché en plein flux **bloque la radio**
   (elle ne répond plus, même rebranchée ; c'était déjà le cas avec SCOUT) : rebrancher le câble,
   puis **éteindre et rallumer la radio**. L'appli le signale et se reconnecte toute seule une fois
   la radio rallumée. Attendre « Radio en mesure », puis « Reprendre » à sa position.
   Pour arrêter proprement, cliquer « Déconnecter » avant de débrancher.
 - Sans radio connectée, « Démarrer », « Reprendre » et les clics sur le plan demandent
-  confirmation : un tronçon parcouru sans radio n'a aucune mesure et compte comme « pas de service ».
+  confirmation : un tronçon parcouru sans radio reste un simple trait, sans mesure ni « pas de service ».
 
 ## Développement
 

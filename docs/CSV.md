@@ -67,6 +67,10 @@ Un point « pas de service » (`no_service` = 1) n'a pas de mesure : `rssi` et l
 mesure sont **vides**, et `astrid_ok` vaut `0`. Il compte comme point mesuré et **non conforme**, comme
 un niveau trop faible. Un RSSI vide n'est pas une valeur nulle : ne jamais le lire comme 0 dBm.
 
+La radio a envoyé des trames sans cellule serveuse (cause `noserving` dans le projet). Une ligne due à un
+silence total de la radio (cause `silent`) n'existe qu'après confirmation par l'utilisateur (bouton
+« Compter ce silence comme No service ») ; les projets enregistrés avant cette règle gardent les leurs.
+
 `astrid_ok` applique le critère enregistré dans le projet ; le seuil peut donc différer de -88 dBm
 si l'utilisateur l'a modifié.
 
