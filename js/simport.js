@@ -1,5 +1,7 @@
 // simport.js — radio simulée (démonstration / formation sans MTP6550), activée par ?demo dans l'URL.
 // Imite un port Web Serial : répond aux 'e q', puis envoie ~1 bloc de mesure par seconde après g03.
+// Zone morte de démonstration, toutes les ~40 s pendant ~10 s : ?demo=noservice (voisines seules,
+// sans LA ni RSSI de la serveuse), ?demo=silent (plus aucune trame).
 import { buildCmd, CMD, ESC } from './protocol.js';
 
 const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -20,8 +22,10 @@ function record(id, v) {
   return [id, 0, 0, 0, (v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
 }
 
+const DEAD_PERIOD = 40, DEAD_LENGTH = 10;   // secondes
+
 export class SimPort {
-  constructor() { this.readable = null; this.writable = null; this.seq = 0; this.rssi = -75; this.timer = 0; }
+  constructor(mode = '') { this.readable = null; this.writable = null; this.seq = 0; this.rssi = -75; this.timer = 0; this.mode = mode; this.ticks = 0; }
 
   getInfo() { return {}; }
 
@@ -43,12 +47,15 @@ export class SimPort {
   }
 
   tick() {
+    const dead = this.ticks++ % DEAD_PERIOD >= DEAD_PERIOD - DEAD_LENGTH;
+    if (dead && this.mode === 'silent') return;
+    const noServing = dead && this.mode === 'noservice';
     // marche aléatoire bornée : passe par toutes les couleurs de la légende
     this.rssi = Math.max(-110, Math.min(-55, this.rssi + Math.round((Math.random() - 0.5) * 8)));
     const r = this.rssi;
     const recs = [
       // LA et canaux fictifs
-      record(0x08, 1001), record(0x07, 0x33000000 | 100), record(0x09, r), record(0x10, r + 105),
+      ...(noServing ? [] : [record(0x08, 1001), record(0x07, 0x33000000 | 100), record(0x09, r), record(0x10, r + 105)]),
       record(0x18, 1002), record(0x17, 101), record(0x19, r - 8), record(0x20, r + 97),
       record(0x28, 1003), record(0x27, 102), record(0x29, r - 17), record(0x30, r + 88),
       record(0x38, 65535), record(0xa8, 65535),

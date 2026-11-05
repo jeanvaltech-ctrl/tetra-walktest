@@ -30,7 +30,9 @@ application (icône dans la barre d'adresse).
 radio… » et choisir **« Motorola Solutions Portable Tetra Radio Port 1 »** (COM5 en général).
 Le « Port 2 » est l'interface AT de la radio et ne répond pas.
 
-Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée).
+Mode démonstration sans radio : ajouter `?demo` à l'adresse (radio simulée). Pour montrer une zone
+sans couverture (~10 s toutes les ~40 s) : `?demo=noservice` (trames sans cellule serveuse) ou
+`?demo=silent` (plus aucune trame).
 
 **Langue** : français, néerlandais ou anglais (boutons FR | NL | EN en haut à droite). Par défaut,
 la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
@@ -46,6 +48,12 @@ la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV n
    « Annuler le point » (Ctrl+Z) : retire le dernier clic, ses mesures seront replacées au suivant.
 5. « Fin de segment » / « Terminer » : cliquer d'abord le dernier point, sinon les mesures
    reçues depuis le dernier clic sont perdues (l'appli demande confirmation).
+
+**Pas de service** : après 3 s de marche sans mesure valide de la cellule serveuse (pauses
+exclues), l'appli ajoute un point « pas de service » par seconde manquante, depuis la dernière
+mesure valide. Ils sont tracés en noir à tirets blancs et comptent **non conformes**, comme un
+niveau sous -98 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
+reçue : vérifier la radio ».
 
 ### Dossier projet (recommandé)
 
@@ -88,7 +96,8 @@ en direct :
   l'objectif. La surface est approchée par la **longueur parcourue** (chaque mesure compte pour
   le bout de trajet qu'elle couvre ; rester sur place ne fausse rien) ; le pourcentage par
   nombre de points est affiché à titre indicatif. Les pourcentages sont arrondis vers le bas ;
-- **exports** : colonne `astrid_ok` (1 / 0) dans le CSV, verdict dans le bandeau du PNG.
+- **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict et parts de la
+  distance parcourue sans service et sous le dernier seuil dans le bandeau du PNG.
 
 « Meilleur que -88 dBm » = strictement supérieur, soit -87 dBm ou mieux (le vert de la légende
 SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ».
@@ -99,10 +108,12 @@ SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère AST
   calibration, seuils, mesures placées, identité radio et **trames radio brutes** horodatées,
   pour pouvoir tout recalculer plus tard). « Ouvrir… » reprend un projet.
 - **Exporter CSV** (par étage) : séparateur `;`, UTF-8 avec BOM, point décimal. Colonnes :
-  `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx;astrid_ok`
-  (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré).
+  `date;time;floor;segment;x;y;x_m;y_m;la;channel;rssi;c1;n1_la;n1_channel;n1_rssi;n1_cx;…;n4_cx;astrid_ok;no_service`
+  (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré ;
+  `no_service` = 1 : point « pas de service », cellules de mesure vides et `astrid_ok` à 0).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
-  (projet, étage, horaire, nombre de mesures, ISSI de la radio).
+  (projet, étage, horaire, nombre de mesures, verdict ASTRID en % de la distance parcourue,
+  « pas de service : x % », « < -98 dBm : y % » de cette distance, ISSI de la radio).
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
   un CSV commun « tous les étages » trié par heure.
 
@@ -119,7 +130,7 @@ SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère AST
   la radio rallumée. Attendre « Radio en mesure », puis « Reprendre » à sa position.
   Pour arrêter proprement, cliquer « Déconnecter » avant de débrancher.
 - Sans radio connectée, « Démarrer », « Reprendre » et les clics sur le plan demandent
-  confirmation : un tronçon parcouru sans radio n'a aucune mesure.
+  confirmation : un tronçon parcouru sans radio n'a aucune mesure et compte comme « pas de service ».
 
 ## Développement
 

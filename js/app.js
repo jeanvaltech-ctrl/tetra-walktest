@@ -5,8 +5,8 @@ import { floorCsv, projectCsv, floorPng, fileSafe } from './export.js';
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
-import { rssiColor, textOn, DEFAULT_THRESHOLDS, upgradeThresholds } from './thresholds.js';
-import { Session, floorStats } from './session.js';
+import { rssiColor, textOn, DEFAULT_THRESHOLDS, NO_COVERAGE, upgradeThresholds } from './thresholds.js';
+import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
@@ -265,7 +265,7 @@ function renderFloors() {
   $('sec-floors').hidden = !p;
   if (!p) return;
   const measuring = state.session && state.session.state !== 'idle';
-  const count = f => t('floor.count', { n: floorSampleCount(f) });
+  const count = f => t('floor.count', { n: floorSampleCount(f), ns: floorStats(f).noService });
   const sel = $('floor-select');
   // libellé court (la barre latérale est étroite) : nom, nombre de mesures entre parenthèses
   sel.innerHTML = p.floors.map(f => {
@@ -675,12 +675,12 @@ function drawSegment(ctx, t, a, b, label, dashed) {
 }
 
 // tronçon en cours : dernier point cliqué → curseur, avec le nombre de mesures en attente
-function drawCurrentLeg(ctx, t, ses) {
+function drawCurrentLeg(ctx, vt, ses) {
   const last = ses.lastPoint;
   if (!last) return;
-  const a = t.toScreen(last);
+  const a = vt.toScreen(last);
   if (state.hover && ses.state === 'walking') {
-    const b = t.toScreen(state.hover);
+    const b = vt.toScreen(state.hover);
     ctx.save();
     ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = '#0b57d0';
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -841,7 +841,7 @@ function renderMeasure() {
     : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} &gt; ${c.rssi} dBm `
       + `<span class="muted">${t('stats.goal', { goal: c.percent, points: fmtPct(r.pctSamples) })}</span></dd>`;
   $('measure-stats').innerHTML =
-    `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
+    `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${s.noService ? ` <span class="ko">${t('stats.noService', { n: nf(s.noService) })}</span>` : ''}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
     `<dt>${t('stats.segments')}</dt><dd>${s.segments}</dd><dt>${t('stats.route')}</dt><dd>${length}</dd>` +
     `<dt>${t('stats.astrid')}</dt>${astrid}`;
 }
@@ -898,8 +898,11 @@ $('btn-thresholds-reset').addEventListener('click', () => {
 
 // ---------- radio ----------
 const radio = new Radio();
-const STALE_MS = 5000;   // au-delà sans mesure : alerte
+const STALE_MS = NO_SERVICE_MS;   // au-delà sans mesure : « pas de service »
 const DEMO = new URLSearchParams(location.search).has('demo');   // radio simulée
+const DEMO_MODE = new URLSearchParams(location.search).get('demo');   // zone morte : noservice | silent
+let streamingSince = 0;    // début du flux : point de départ tant qu'aucune mesure n'est arrivée
+let silentWarned = false;  // radio muette signalée une fois par épisode sans service
 
 function showRadioError(msg) {
   $('radio-error').textContent = msg || '';
@@ -912,7 +915,7 @@ $('btn-connect').addEventListener('click', async () => {
   radioStuck = false;
   let port;
   if (DEMO) {
-    try { await radio.connect(new SimPort()); } catch (e) { showRadioError(e.message); }
+    try { await radio.connect(new SimPort(DEMO_MODE)); } catch (e) { showRadioError(e.message); }
     return;
   }
   try {
@@ -1002,9 +1005,9 @@ radio.addEventListener('state', e => {
   $('sec-live').hidden = s !== 'streaming';
   if (s === 'disconnected') $('radio-info').hidden = true;
   if (message) showRadioError(message);
-  if (s === 'streaming') resetLive();
+  if (s === 'streaming') { streamingSince = Date.now(); resetLive(); }
   // radio perdue en pleine mesure : pause automatique (rien n'est perdu de ce qui est placé)
-  if (s === 'disconnected' && state.session && state.session.pause()) setStatus(t('status.radioPaused'));
+  if (s === 'disconnected' && state.session && state.session.pause(pauseTime())) setStatus(t('status.radioPaused'));
   renderMeasure();
 });
 
@@ -1021,6 +1024,7 @@ radio.addEventListener('lost', () => {
 
 // trames brutes conservées pendant la mesure (pour pouvoir tout recalculer plus tard)
 radio.addEventListener('frame', e => {
+  if (state.session) state.session.noteFrame(e.detail.time.getTime());
   if (state.session && state.session.state !== 'idle') state.floor.raw.push([e.detail.time.getTime(), toHex(e.detail.body)]);
 });
 
@@ -1029,6 +1033,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 function resetLive() {
   const b = $('live-rssi');
   b.style.background = ''; b.style.color = '';
+  b.classList.remove('no-service');
   b.querySelector('b').textContent = '—';
   for (const id of ['live-la', 'live-ch', 'live-c1']) $(id).textContent = '—';
   $('live-neigh').innerHTML = `<tr><td colspan="4" class="muted">${t('live.waiting')}</td></tr>`;
@@ -1039,6 +1044,7 @@ function resetLive() {
 radio.addEventListener('measure', e => {
   if (state.session) state.session.addSample(e.detail.snapshot, e.detail.time.getTime());
   const s = e.detail.snapshot, b = $('live-rssi'), bg = colorOf(s.rssi);
+  b.classList.remove('no-service');
   b.style.background = bg; b.style.color = textOn(bg);
   b.querySelector('b').textContent = s.rssi ?? '—';
   $('live-la').textContent = s.la ?? '—';
@@ -1058,15 +1064,64 @@ radio.addEventListener('measure', e => {
   updateAge();
 });
 
-function updateAge() {
-  if (radio.state !== 'streaming') return;
-  const last = radio.lastMeasureAt, age = last ? (Date.now() - last) / 1000 : null;
-  const stale = age === null ? false : age * 1000 > STALE_MS;
-  $('live-age').textContent = age === null ? t('age.first') : t(stale ? 'age.stale' : 'age.last', { s: nf(age) });
-  $('live-age').classList.toggle('ko', stale);
-  $('radio-pill').classList.toggle('stale', stale);
+/** Plus de mesure valide : le panneau live le dit, plutôt que de garder la dernière valeur reçue. */
+function showNoService() {
+  const b = $('live-rssi');
+  b.classList.add('no-service');
+  b.style.background = NO_COVERAGE.color; b.style.color = textOn(NO_COVERAGE.color);
+  b.querySelector('b').textContent = t('legend.noService');
+  for (const id of ['live-la', 'live-ch', 'live-c1']) $(id).textContent = '—';
+  $('live-astrid').textContent = t('live.noService');
+  $('live-astrid').className = 'verdict ko';
+  const td = Object.assign(document.createElement('td'), { colSpan: 4, className: 'muted', textContent: t('live.waiting') });
+  const tr = document.createElement('tr');
+  tr.append(td);
+  $('live-neigh').replaceChildren(tr);
 }
-setInterval(updateAge, 1000);
+
+function updateAge() {
+  const now = Date.now(), ses = state.session, streaming = radio.state === 'streaming';
+  const walking = !!ses && ses.state === 'walking', el = $('live-age');
+  // temps sans mesure valide : flux radio si la radio est là, sinon temps de marche
+  const gap = streaming ? now - Math.max(radio.lastMeasureAt, streamingSince) : walking ? ses.serviceGap(now) : null;
+  const stale = gap !== null && gap >= STALE_MS;
+  const silent = stale && noServiceCause(radio.lastFrameAt, now) === 'silent';
+  if (!stale) silentWarned = false;
+  if (!streaming && !walking) {
+    el.classList.remove('ko', 'silent');
+    $('radio-pill').classList.remove('stale');
+    return;
+  }
+  $('sec-live').hidden = !streaming && !stale;
+  if (stale) showNoService();
+  el.textContent = silent ? `⚠ ${t('live.silent')}`
+    : stale ? t('age.stale', { s: nf(gap / 1000) })
+    : radio.lastMeasureAt ? t('age.last', { s: nf(gap / 1000) }) : t('age.first');
+  el.classList.toggle('ko', stale);
+  el.classList.toggle('silent', silent);
+  $('radio-pill').classList.toggle('stale', stale);
+  if (silent && !silentWarned) {
+    silentWarned = true;
+    notify(t('live.silent'), 'ko', 10000);
+  }
+}
+let lastTick = Date.now();   // dernier contrôle de chaque seconde (sert à repérer une veille)
+
+/** Instant de la pause : au dernier contrôle si l'ordinateur sortait de veille (le temps de veille compte comme pause). */
+const pauseTime = (now = Date.now()) => (isFreeze(lastTick, now, radio.lastFrameAt) ? lastTick : now);
+
+setInterval(() => {
+  const now = Date.now();
+  // réveil après une veille (aucune trame pendant le saut d'horloge) : pause, sans point « pas de service »
+  if (state.session && state.session.state === 'walking' && isFreeze(lastTick, now, radio.lastFrameAt)) {
+    state.session.pause(lastTick);
+    notify(t('notify.frozen'), 'ko', 15000);
+  }
+  lastTick = now;
+  // ajoute les points manquants ; l'événement 'change' de la session redessine et sauvegarde
+  if (state.session) state.session.checkService(now, noServiceCause(radio.lastFrameAt, now));
+  updateAge();
+}, 1000);
 
 window.addEventListener('pagehide', () => radio.stopNow());
 

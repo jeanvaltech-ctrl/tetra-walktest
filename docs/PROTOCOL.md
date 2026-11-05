@@ -121,6 +121,25 @@ Juste après le redémarrage, la radio a envoyé sur COM5, avant les réponses `
 `47 72 00 00 00 00 d0 00 08 1b 09 00`, `47 72 00 00 00 00 19 00 08`, `47 72 00 00 00 00 19 00 0d`,
 `47 72 00 00 00 00 d0 00 08 1b 09 01`.
 
+## Perte de service
+
+Ce que fait l'appli : une mesure valide est un bloc qui contient `08` (LA) **et** `09` (RSSI).
+Après 3 s de marche sans mesure valide (pauses exclues), elle ajoute un point « pas de service »
+par seconde manquante, depuis la dernière mesure valide, compté non conforme. Cause enregistrée :
+`noserving` si une trame quelconque est arrivée depuis moins de 3 s, `silent` sinon.
+
+**Relevé sur une vraie mesure** (trames brutes d'un projet, sous-sol, 3 zones sans service de
+9 à 34 s) : sans service, la radio **ne se tait pas**. Elle continue d'envoyer des trames, au même
+rythme (jamais plus de 1,4 s sans trame), mais **aucun bloc ne contient `08` / `09`** :
+- blocs de mesure des voisines seules (`18`/`19`, `28`/`29`…) ;
+- blocs de resélection (`41`–`47`, `56`, `57`, `0b`) et de statut (`01`, `02`, `03`, `05`) ;
+- trames `C` et bursts MAC `len=0x32`.
+
+Aucune valeur sentinelle n'a été vue sur la serveuse (pas de LA `0` / `65535`, pas de RSSI hors
+plage) : la perte de service se détecte donc par l'absence de bloc `08` + `09`, cause `noserving`.
+La cause `silent` (plus aucune trame) reste celle d'une radio bloquée ou débranchée (voir l'incident
+« Port 1 muet » ci-dessus) : l'appli la trace aussi en « pas de service » et demande de vérifier la radio.
+
 ## Points ouverts
 
 - Sens exact de `i 01 08`, des IDs de statut, du bloc 93–ae (MER ?).

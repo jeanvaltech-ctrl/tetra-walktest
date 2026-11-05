@@ -3,13 +3,16 @@ import { ViewTransform } from './geometry.js';
 import { NEIGH } from './protocol.js';
 import { FONT, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
 import { t } from './i18n.js';
-import { DEFAULT_CRITERION, sampleOk, complianceText } from './criterion.js';
+import { DEFAULT_CRITERION, sampleOk, complianceText, floorShares, fmtPct } from './criterion.js';
+import { DEFAULT_THRESHOLDS } from './thresholds.js';
 
 // Colonnes : mêmes noms que tools/mtp_trace.py, plus date, segment et position en mètres.
 // x, y : pixels du plan importé (origine en haut à gauche) ; x_m, y_m : si l'étage est calibré.
 // astrid_ok : 1 si le RSSI respecte le critère ASTRID du projet (> -88 dBm par défaut), sinon 0.
+// no_service : 1 sur un point « pas de service » (cellules de mesure vides, astrid_ok à 0), sinon 0.
+// CRG lit ces colonnes : ajouter à la fin, ne jamais renommer ni réordonner.
 export const CSV_COLUMNS = ['date', 'time', 'floor', 'segment', 'x', 'y', 'x_m', 'y_m', 'la', 'channel', 'rssi', 'c1',
-  ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`]), 'astrid_ok'];
+  ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`]), 'astrid_ok', 'no_service'];
 
 const pad = (v, n = 2) => String(v).padStart(n, '0');
 const localDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -36,6 +39,7 @@ function csvLines(floor, criterion) {
       x: s.x.toFixed(1), y: s.y.toFixed(1),
       x_m: m ? (s.x * m).toFixed(2) : '', y_m: m ? (s.y * m).toFixed(2) : '',
       astrid_ok: sampleOk(s.rssi, criterion) ? 1 : 0,
+      no_service: s.noService ? 1 : 0,
     };
     return { time: s.time, line: CSV_COLUMNS.map(c => csvCell(row[c])).join(';') };
   });
@@ -59,7 +63,10 @@ export function caption(project, floor) {
     : '';
   const radio = floor.radio && floor.radio.issi ? t('caption.radio', { issi: floor.radio.issi }) : '';
   const astrid = complianceText(floor, project.criterion || DEFAULT_CRITERION);
-  return [parts, when, t('caption.measures', { n: samples.length }), astrid, radio].filter(Boolean).join(' · ');
+  const th = project.thresholds || DEFAULT_THRESHOLDS, sh = floorShares(floor, th);
+  const shares = sh.noService === null ? [] : [t('caption.noService', { pct: fmtPct(sh.noService) }),
+    t('caption.below', { rssi: th[th.length - 1].min, pct: fmtPct(sh.below) })];
+  return [parts, when, t('caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
 }
 
 /** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau. */
