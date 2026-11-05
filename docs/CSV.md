@@ -115,4 +115,8 @@ Même règle dans Walk-Test (panneaux, bandeau du PNG) et dans CRG 2.6.3.
 
 Le bandeau du PNG donne la part conforme et le verdict, la part « pas de service » et la distance
 parcourue (décision de Jean du 04/11/2026), par exemple :
-`ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · pas de service : 49,4 % · distance parcourue : 19,7 %`.
+`ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · No service : 49,4 % · distance parcourue : 19,7 %`.
+
+Dans le PNG, en français et en néerlandais, le terme reste « No service » dans la ligne de légende et
+dans le bandeau, quelle que soit la langue des exports (décision de Jean du 05/11/2026) ; le reste suit
+la langue des exports. Le contenu du CSV ne change pas (colonne `no_service`).
