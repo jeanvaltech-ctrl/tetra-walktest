@@ -1358,6 +1358,31 @@ await test('Silence R3-c : « Compter ce silence » -> reprise, points silent 1/
   assert(m.cause('noserving').length === 5 && m.cause('silent').length === 10, `${m.cause('noserving').length} noserving, ${m.cause('silent').length} silent`);
 });
 
+await test('Silence R3-c : « Compter ce silence » ne compte que la durée réelle du silence (dernière trame avant -> première trame après)', () => {
+  // décision de Jean (05/11) : si la radio est revenue avant le clic, seules les secondes réellement muettes comptent
+  const w = silenceWalk(10000);
+  w.click(10000, 100);
+  for (let t = 11000; t <= 13000; t += 1000) w.tick(t);
+  assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`);
+  for (let t = 18000; t <= 29000; t += 1000) { w.frame(t); w.tick(t); }    // la radio revient à 18 s, toujours en pause
+  w.go(30000);
+  const n = w.s.countSilence(30000);
+  assert(n === 8 && w.cause('silent').length === 8, `${n} point(s) « silent » pour 8 s de silence réel (10 s -> 18 s), clic à 30 s`);
+  assert(w.cause('silent').every(x => x.time > 10000 && x.time <= 18000), 'points hors du silence : ' + w.cause('silent').map(x => x.time).join(','));
+  assert(w.s.state === 'walking' && w.s.silence == null, `état ${w.s.state}`);
+  // de la première trame revenue (18 s) jusqu'au clic (30 s) : c'était une pause, pas de la marche
+  assert(w.s.pausedTotal === 12000 && w.s.active(30000) === 18000, `pause comptée : ${w.s.pausedTotal} ms (attendu 12000)`);
+  w.frame(31000); w.frame(32000); w.click(32000, 200);
+  const leg2 = w.floor.segments[0].samples.filter(x => x.leg === 2);
+  assert(leg2.length === 10 && leg2.filter(x => x.noService === 'silent').length === 8, `${leg2.length} points sur le tronçon fermé par le clic`);
+  assert(w.noService().length === 8, `${w.noService().length} point(s) « No service » au total`);
+  // radio toujours muette au moment du clic : le silence court jusqu'au clic (cas déjà couvert ci-dessus : 20 s -> 20 points)
+  const m = silenceWalk(10000);
+  for (let t = 11000; t <= 13000; t += 1000) m.tick(t);
+  m.go(20000);
+  assert(m.s.countSilence(20000) === 10 && m.s.pausedTotal === 0, `radio encore muette : ${m.cause('silent').length} point(s), pause ${m.s.pausedTotal}`);
+});
+
 await test('Silence R3 : « Reprendre », « Fin de segment » et « Terminer » -> silence non compté, bouton retiré', () => {
   const paused = () => { const w = silenceWalk(10000); for (let t = 11000; t <= 13000; t += 1000) w.tick(t); assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`); return w; };
   const w = paused();
