@@ -213,10 +213,14 @@ await test('Seuils RSSI : légende ≥ -65 … ≥ -88, < -88, puis « pas de se
   const items = legendItems(DEFAULT_THRESHOLDS);
   assert(items.map(i => i.label).join(' | ') === '≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88', items.map(i => i.label).join(' | '));
   assert(items.map(i => i.color).join() === '#FF0000,#FF8C00,#FFD700,#32CD32,#0066CC', items.map(i => i.color).join());
-  for (const [l, want] of [['fr', 'Pas de service'], ['nl', 'Geen service'], ['en', 'No service']]) {
+  // à l'export : « No service » dans toutes les langues (décision de Jean, 05/11/2026)
+  for (const l of ['fr', 'nl', 'en']) {
     const lines = renderForLegend.legendLines(DEFAULT_THRESHOLDS, l);
-    assert(lines.join(' | ') === `≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88 | ${want}`, `${l} : ${lines.join(' | ')}`);
+    assert(lines.join(' | ') === '≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88 | No service', `${l} : ${lines.join(' | ')}`);
   }
+  // à l'écran (sans langue) : celle de l'interface
+  const screen = renderForLegend.legendLines(DEFAULT_THRESHOLDS);
+  assert(screen.at(-1) === 'Pas de service', 'écran : ' + screen.join(' | '));
 });
 
 await test('Seuils RSSI : projet enregistré avec les seuils SCOUT -> gardés à l\'ouverture, message avec ses seuils', async () => {
@@ -273,7 +277,8 @@ function assertOldRender(th, labels, colors, colorCases) {
   const items = legendItems(th);
   assert(items.map(i => i.label).join(' | ') === labels.join(' | '), 'libellés : ' + items.map(i => i.label).join(' | '));
   assert(items.map(i => i.color).join() === colors.join(), 'couleurs : ' + items.map(i => i.color).join());
-  for (const [l, noService] of [['fr', 'Pas de service'], ['nl', 'Geen service'], ['en', 'No service']]) {
+  // à l'export : « No service » dans toutes les langues ; à l'écran (sans langue) : celle de l'interface
+  for (const [l, noService] of [['fr', 'No service'], ['nl', 'No service'], ['en', 'No service'], [undefined, 'Pas de service']]) {
     const d = legendDrawing(th, l);
     assert(d.texts.join(' | ') === [...labels, noService].join(' | '), `dessin ${l} : ${d.texts.join(' | ')}`);
     assert(d.fills.join() === [...colors, BLACK].join(), `dessin ${l} : ${d.fills.join()}`);
@@ -372,13 +377,13 @@ await test('Bandeau : ASTRID, verdict, pas de service, distance ; ni part non co
   const { project } = await sampleProject();
   // décision de Jean (04/11) : 59 conformes, 91 faibles, 147 sans service sur 297 ; 147/297 = 49,49… -> 49,4
   const cap = caption(project, withNoService(countsFloor(59, 297), 147), 'fr');
-  assert(cap.endsWith('297 points dont 147 sans service · ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · pas de service : 49,4 % · distance parcourue : 19,7 %'), cap);
+  assert(cap.endsWith('297 points dont 147 No service · ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · No service : 49,4 % · distance parcourue : 19,7 %'), cap);
   assert(!cap.includes('non conforme :') && !cap.includes('< -98') && !cap.includes('< -88 dBm :'), cap);
   const en = caption(project, withNoService(countsFloor(59, 297), 147), 'en');
   assert(en.endsWith('ASTRID: 19.8 % of points ≥ -88 dBm — NOT compliant (target 95 %) · no service: 49.4 % · distance covered: 19.7 %'), en);
   assert(!en.includes('non-compliant') && !en.includes('< -88'), en);
   const nl = caption(project, withNoService(countsFloor(59, 297), 147), 'nl');
-  assert(nl.endsWith('ASTRID: 19,8 % van de punten ≥ -88 dBm — voldoet NIET (doel 95 %) · geen service: 49,4 % · afgelegde weg: 19,7 %'), nl);
+  assert(nl.endsWith('297 punten waarvan 147 No service · ASTRID: 19,8 % van de punten ≥ -88 dBm — voldoet NIET (doel 95 %) · No service: 49,4 % · afgelegde weg: 19,7 %'), nl);
   assert(!nl.includes('niet conform') && !nl.includes('< -88'), nl);
   // la part « pas de service » ne dépend plus des seuils ; le point à -88 pile n'y compte pas
   const fl = countsFloor(4, 4), s = fl.segments[0].samples;
@@ -753,7 +758,7 @@ await test('Pas de service : export CSV et PNG (trace noire à tirets, légende,
   const centre = [...Array(40)].map((_, i) => px(170 + i, 150));
   assert(centre.includes('255,255,255') && centre.includes('0,0,0'), 'tirets blancs absents : ' + [...new Set(centre)].join(' / '));
   const cap = caption(project, floor);
-  assert(/distance parcourue/.test(cap) && /pas de service/i.test(cap) && !/< -88 dBm/.test(cap), cap);
+  assert(/distance parcourue/.test(cap) && /No service : /.test(cap) && !/< -88 dBm/.test(cap), cap);
   for (const l of LANGS) assert(STRINGS['legend.noService'] && STRINGS['legend.noService'][l], `légende « pas de service » en ${l}`);
 });
 
@@ -832,7 +837,8 @@ await test('Pas de service : compteurs « N points dont M sans service » et tex
   const { project, floor } = await sampleProject();
   floor.segments = noServiceWalk('noserving', 150, 50).segments;
   const all = floor.segments[0].samples.length, ns = floor.segments[0].samples.filter(x => x.noService).length;
-  assert(caption(project, floor).includes(`${all} points dont ${ns} sans service`), caption(project, floor));
+  assert(caption(project, floor).includes(`${all} points dont ${ns} No service`), caption(project, floor));
+  // le compteur de la liste des étages est à l'écran : il garde la langue de l'interface
   assert(t('floor.count', { n: all, ns }) === `${all} points dont ${ns} sans service`, t('floor.count', { n: all, ns }));
   assert(t('floor.count', { n: 3, ns: 0 }) === '3 mesures', 'sans perte de service, le libellé ne change pas');
   for (const l of ['nl', 'en']) {
@@ -953,11 +959,11 @@ await test('Langue des exports : interface FR, réglage par défaut -> légende 
 await test('Langue des exports : NL -> légende et bandeau en néerlandais, interface inchangée', async () => {
   const { project, floor } = await sampleProject();
   floor.segments = noServiceWalk('noserving', 150, 50).segments;
-  assert(legendLines(DEFAULT_THRESHOLDS, 'nl').includes(STRINGS['legend.noService'].nl), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, 'nl').join(' | '));
+  assert(legendLines(DEFAULT_THRESHOLDS, 'nl').includes('No service'), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, 'nl').join(' | '));
   const cap = caption(project, floor, 'nl');
   assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
-  assert(/zonder service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
-  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && !/< -88 dBm/.test(cap), cap);
+  assert(/waarvan \d+ No service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
+  assert(/afgelegde weg/.test(cap) && /No service: \d+,\d %/.test(cap) && !/< -88 dBm/.test(cap), cap);
   assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
 });
 
@@ -982,7 +988,7 @@ await test('Langue des exports : textes dessinés dans le PNG (légende, bandeau
     setExportLang('nl', false);
     await floorPng(project, floor, img);
     const nl = drawn.join(' | ');
-    assert(drawn.includes(STRINGS['legend.noService'].nl) && !drawn.includes('Pas de service'), 'légende du PNG : ' + nl);
+    assert(drawn.includes('No service') && !drawn.includes('Pas de service'), 'légende du PNG : ' + nl);
     assert(/van de punten/.test(nl) && !/des points/.test(nl), 'bandeau du PNG : ' + nl);
     assert(drawn.includes('5,0 m'), 'échelle : ' + nl);
     assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée par l\'export');
@@ -1000,6 +1006,76 @@ await test('Langue des exports : textes dessinés dans le PNG (légende, bandeau
   } finally {
     proto.fillText = real;
     setExportLang('en', false);
+  }
+});
+
+// Décision de Jean (05/11/2026) : « No service » reste en anglais dans le PNG exporté (légende et bandeau),
+// quelle que soit la langue des exports ; l'écran garde la langue de l'interface.
+const TRANSLATED_NO_SERVICE = ['Pas de service', 'pas de service', 'Geen service', 'geen service', 'sans service', 'zonder service'];
+const translatedNoService = text => TRANSLATED_NO_SERVICE.filter(term => text.includes(term));
+
+await test('Langue des exports : « No service » en anglais dans la légende et le bandeau du PNG, en FR et en NL', async () => {
+  const { project } = await sampleProject();
+  const fl = withNoService(countsFloor(59, 297), 147);
+  const cases = {
+    fr: '297 points dont 147 No service · ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · No service : 49,4 % · distance parcourue : 19,7 %',
+    nl: '297 punten waarvan 147 No service · ASTRID: 19,8 % van de punten ≥ -88 dBm — voldoet NIET (doel 95 %) · No service: 49,4 % · afgelegde weg: 19,7 %',
+  };
+  for (const [lang, want] of Object.entries(cases)) {
+    const lines = legendLines(DEFAULT_THRESHOLDS, lang), cap = caption(project, fl, lang);
+    assert(lines.at(-1) === 'No service', `légende ${lang} : ${lines.join(' | ')}`);
+    assert(cap.endsWith(want), `bandeau ${lang} : ${cap}`);
+    assert(!translatedNoService(cap).length, `bandeau ${lang}, terme traduit (${translatedNoService(cap).join(', ')}) : ${cap}`);
+    // une légende enregistrée (« < -98 (No) ») a la même ligne
+    assert(legendLines(scoutProject().thresholds, lang).at(-1) === 'No service', `légende SCOUT ${lang} : ${legendLines(scoutProject().thresholds, lang).join(' | ')}`);
+  }
+  // l'anglais ne change pas
+  const en = caption(project, fl, 'en');
+  assert(legendLines(DEFAULT_THRESHOLDS, 'en').at(-1) === 'No service', legendLines(DEFAULT_THRESHOLDS, 'en').join(' | '));
+  assert(en.endsWith('297 points, 147 without service · ASTRID: 19.8 % of points ≥ -88 dBm — NOT compliant (target 95 %) · no service: 49.4 % · distance covered: 19.7 %'), en);
+});
+
+await test('Langue des exports : « No service » dessiné dans le PNG en FR et en NL, interface en français', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  const img = await createImageBitmap(floor.image.blob);
+  const proto = OffscreenCanvasRenderingContext2D.prototype, real = proto.fillText;
+  let drawn = [];
+  proto.fillText = function (text, ...rest) { drawn.push(String(text)); return real.call(this, text, ...rest); };
+  try {
+    for (const lang of ['fr', 'nl']) {
+      drawn = [];
+      setExportLang(lang, false);
+      await floorPng(project, floor, img);
+      const all = drawn.join(' | ');
+      assert(drawn.includes('No service'), `légende du PNG ${lang} : ${all}`);
+      assert(/No service ?: \d+,\d %/.test(all), `bandeau du PNG ${lang} : ${all}`);
+      assert(!translatedNoService(all).length, `PNG ${lang}, terme traduit (${translatedNoService(all).join(', ')}) : ${all}`);
+    }
+  } finally {
+    proto.fillText = real;
+    setExportLang('en', false);
+  }
+});
+
+await test('Interface : l\'écran garde le terme traduit, même après un export', () => {
+  const screen = () => {
+    const d = legendDrawing(DEFAULT_THRESHOLDS);
+    return [d.texts.at(-1), t('legend.noService'), thresholdsMod.thresholdsPanelTail(DEFAULT_THRESHOLDS).at(-1).text];
+  };
+  try {
+    const want = { fr: 'Pas de service', nl: 'Geen service', en: 'No service' };
+    for (const [l, term] of Object.entries(want)) {
+      setLang(l, false);
+      assert(screen().every(s => s === term), `${l} : ${screen().join(' | ')}`);
+    }
+    setLang('fr', false);
+    assert(t('live.noService').includes('Pas de service'), t('live.noService'));
+    assert(t('stats.noService', { n: 3 }) === 'dont 3 sans service', t('stats.noService', { n: 3 }));
+    assert(t('floor.count', { n: 5, ns: 3 }) === '5 points dont 3 sans service', t('floor.count', { n: 5, ns: 3 }));
+    assert(t('crit.help').includes('pas de service'), t('crit.help'));
+  } finally {
+    setLang('fr', false);
   }
 });
 
@@ -1160,7 +1236,7 @@ await test('Pourcentages : verdict et troncature sans erreur de virgule flottant
   const { project } = await sampleProject();
   // 1 point conforme, 2 sans service : 66,66… % tronqué à 66,6 (pas 66,7)
   const cap = caption(project, withNoService(countsFloor(1, 3), 2), 'fr');
-  assert(cap.includes('33,3 % des points') && cap.includes('pas de service : 66,6 %'), cap);
+  assert(cap.includes('33,3 % des points') && cap.includes('No service : 66,6 %'), cap);
 });
 
 const ko = results.filter(r => !r.ok).length;
