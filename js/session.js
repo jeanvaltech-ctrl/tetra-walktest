@@ -90,6 +90,8 @@ export class Session extends EventTarget {
       if (this.state === 'walking' && time - from >= NO_SERVICE_MS) unseen = time - from;
     }
     if (time > this.lastFrameAt) this.lastFrameAt = time;
+    // radio revenue pendant la pause « silence » : fin réelle du silence (seule cette durée peut être comptée)
+    if (this.state === 'paused' && this.silence && this.silence.endAt == null && time > this.pauseStart) this.silence.endAt = time;
     return unseen;
   }
 
@@ -161,21 +163,26 @@ export class Session extends EventTarget {
   }
 
   /**
-   * « Compter ce silence comme No service » : reprise, le temps de pause compte comme de la marche, et le
-   * silence reçoit un point 'silent' par seconde, placé comme les autres. Retourne le nombre de points ajoutés.
+   * « Compter ce silence comme No service » : reprise, et le silence reçoit un point 'silent' par seconde,
+   * placé comme les autres. Seule la durée réelle du silence compte (décision de Jean, 05/11/2026) : de la
+   * dernière trame avant la pause à la première trame reçue après ; si la radio est encore muette, jusqu'à
+   * maintenant. Le temps entre le retour de la radio et le clic reste une pause. Retourne le nombre de points.
    */
   countSilence(now = this.now()) {
     if (this.state !== 'paused' || !this.silence || this.silence.reason !== 'silent') return 0;
+    const end = Math.min(this.silence.endAt ?? now, now);
     this.silence = null;
+    this.pausedTotal += now - end;   // radio revenue avant le clic : cette attente n'est pas de la marche
     this.state = 'walking';
     this.walkingSince = now;
-    const taNow = this.active(now);
+    const taEnd = this.active(now);  // = temps actif à la fin réelle du silence
     let added = 0;
-    for (let ta = this.gapTa + NO_SERVICE_STEP_MS; ta <= taNow; ta += NO_SERVICE_STEP_MS) {
-      this.addNoService({ ...EMPTY_MEASURE, noService: 'silent', time: now - (taNow - ta), ta });
+    for (let ta = this.gapTa + NO_SERVICE_STEP_MS; ta <= taEnd; ta += NO_SERVICE_STEP_MS) {
+      this.addNoService({ ...EMPTY_MEASURE, noService: 'silent', time: end - (taEnd - ta), ta });
       this.gapTa = ta;
       added++;
     }
+    this.validTa = Math.max(this.validTa, taEnd);   // pas de second remplissage du même silence par checkService
     this.changed();
     return added;
   }
