@@ -51,6 +51,8 @@ dl.info dd { margin: 0; overflow-wrap: anywhere; }
 .help { background: color-mix(in srgb, var(--accent) 12%, transparent); border-left: 3px solid var(--accent); padding: 6px 8px; border-radius: 4px; }
 .ok { color: var(--ok); } .ko { color: var(--ko); }
 .help.warn { background: color-mix(in srgb, var(--ko) 14%, transparent); border-left-color: var(--ko); font-weight: 500; }
+.silence-banner { margin: 8px 0; }
+.silence-banner p { margin: 0 0 6px; }
 
 .lang { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
 .lang button { border: 0; border-radius: 0; padding: 3px 8px; min-width: 0; font-size: 12px; background: transparent; color: var(--muted); }

@@ -125,8 +125,8 @@ Juste après le redémarrage, la radio a envoyé sur COM5, avant les réponses `
 
 Ce que fait l'appli : une mesure valide est un bloc qui contient `08` (LA) **et** `09` (RSSI).
 Après 3 s de marche sans mesure valide (pauses exclues), elle ajoute un point « pas de service »
-par seconde manquante, depuis la dernière mesure valide, compté non conforme. Cause enregistrée :
-`noserving` si une trame quelconque est arrivée depuis moins de 3 s, `silent` sinon.
+par seconde manquante, depuis la dernière mesure valide, compté non conforme, à condition que des
+trames continuent d'arriver (cause `noserving`). Un silence total n'en donne pas : voir ci-dessous.
 
 **Relevé sur une vraie mesure** (trames brutes d'un projet, sous-sol, 3 zones sans service de
 9 à 34 s) : sans service, la radio **ne se tait pas**. Elle continue d'envoyer des trames, au même
@@ -137,8 +137,31 @@ rythme (jamais plus de 1,4 s sans trame), mais **aucun bloc ne contient `08` / `
 
 Aucune valeur sentinelle n'a été vue sur la serveuse (pas de LA `0` / `65535`, pas de RSSI hors
 plage) : la perte de service se détecte donc par l'absence de bloc `08` + `09`, cause `noserving`.
-La cause `silent` (plus aucune trame) reste celle d'une radio bloquée ou débranchée (voir l'incident
-« Port 1 muet » ci-dessus) : l'appli la trace aussi en « pas de service » et demande de vérifier la radio.
+
+## Silence radio et veille : ce n'est pas une perte de service
+
+Plus aucune trame pendant au moins 3 s ne vient donc pas de la couverture : radio bloquée ou débranchée
+(incident « Port 1 muet » ci-dessus), ou USB coupé par la veille du portable. **Observé sur le terrain**
+(Windows 11, veille moderne, capot fermé ~30 s en marchant) : le JavaScript continue dans la page cachée,
+le minuteur d'une seconde est freiné mais pas assez pour ressembler à un saut d'horloge, l'USB est coupé et
+Windows ne signale la perte du port qu'après coup. Compter ce silence dessinait une longue diagonale
+« No service » au clic suivant.
+
+« No service » ne vient que de trames reçues sans cellule serveuse. Ce que fait l'appli pendant la marche :
+
+| Situation | Effet |
+|---|---|
+| Trames sans serveuse, sans écart de 3 s (page visible ou cachée) | points `noserving`, un par seconde |
+| Page cachée ou figée, aucune trame depuis 3 s | veille : pause datée de la dernière trame, aucun point, message au retour |
+| Page visible, aucune trame depuis 3 s | pause datée de la dernière trame, aucun point, avertissement et bouton « Compter ce silence comme No service » |
+| Saut d'horloge de plus de 10 s sans trame | pause datée du dernier contrôle, aucun point |
+| Port perdu | pause datée de la dernière trame, aucun point |
+| Silence découvert une fois fini (contrôle freiné) | aucun point pour les secondes muettes, la marche continue, message « non comptée » |
+
+La cause `silent` n'existe donc que sur confirmation (bouton ci-dessus) : la mesure reprend, le temps de
+pause compte comme de la marche, et un point `silent` par seconde couvre le silence jusqu'au clic sur le
+bouton. Les points `silent` des projets enregistrés avant cette règle restent tels quels.
+Sans radio connectée, marcher a été confirmé par l'utilisateur : ni pause automatique ni point.
 
 ## Points ouverts
 

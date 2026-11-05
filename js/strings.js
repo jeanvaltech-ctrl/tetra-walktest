@@ -52,6 +52,18 @@ export const STRINGS = {
     nl: 'De computer stond in slaapstand of was vastgelopen: meting gepauzeerd bij de laatste controle. Hervat bij het laatst aangeklikte punt.',
     en: 'The computer was asleep or frozen: measurement paused at the last check. Resume from the last clicked point.',
   },
+  'status.standby': {
+    fr: 'Veille détectée (page cachée, radio muette) : mesure en pause depuis {time}. Reprendre au dernier point cliqué.',
+    nl: 'Slaapstand gedetecteerd (pagina verborgen, radio stil): meting gepauzeerd sinds {time}. Hervat bij het laatst aangeklikte punt.',
+    en: 'Standby detected (page hidden, radio silent): measurement paused since {time}. Resume from the last clicked point.',
+  },
+  'status.silencePaused': {
+    fr: 'Radio muette : mesure en pause depuis {time}, ce silence n\'est pas compté. « Reprendre » l\'ignore.',
+    nl: 'Radio stil: meting gepauzeerd sinds {time}, deze stilte wordt niet meegeteld. „Hervatten" negeert ze.',
+    en: 'Radio silent: measurement paused since {time}, this silence is not counted. "Resume" ignores it.',
+  },
+  'notify.silenceSkipped': { fr: 'Radio silencieuse {n} s : non comptée', nl: 'Radio {n} s stil: niet meegeteld', en: 'Radio silent for {n} s: not counted' },
+  'status.measureResumed': { fr: 'Mesure reprise', nl: 'Meting hervat', en: 'Measurement resumed' },
   'status.radioPaused': { fr: 'Radio déconnectée : mesure en pause', nl: 'Radio niet verbonden: meting gepauzeerd', en: 'Radio disconnected: measurement paused' },
   'status.unplugged': { fr: 'Radio débranchée', nl: 'Radio losgekoppeld', en: 'Radio unplugged' },
   'status.unpluggedAuto': { fr: 'Radio débranchée : rebranchez-la, la reconnexion est automatique', nl: 'Radio losgekoppeld: sluit hem opnieuw aan, de verbinding wordt automatisch hersteld', en: 'Radio unplugged: plug it back in, it will reconnect automatically' },
@@ -80,6 +92,18 @@ export const STRINGS = {
   'btn.endseg': { fr: 'Fin de segment', nl: 'Einde segment', en: 'End segment' },
   'btn.undo': { fr: 'Annuler le point', nl: 'Punt ongedaan maken', en: 'Undo point' },
   'btn.stop': { fr: 'Terminer', nl: 'Beëindigen', en: 'Finish' },
+  'btn.discard': { fr: 'Jeter les mesures en attente', nl: 'Metingen in afwachting weggooien', en: 'Discard pending measurements' },
+  'btn.countSilence': { fr: 'Compter ce silence comme No service', nl: 'Deze stilte als No service tellen', en: 'Count this silence as No service' },
+  'confirm.discard': {
+    fr: p => `Jeter ${p.n} ${pl(p.n, 'mesure', 'mesures')} en attente${p.noService ? ` (dont ${p.noService} No service)` : ''} ? ${pl(p.n, 'Elle ne sera pas placée', 'Elles ne seront pas placées')} sur le plan.`,
+    nl: p => `${p.n} ${pln(p.n, 'meting', 'metingen')} in afwachting weggooien${p.noService ? ` (waarvan ${p.noService} No service)` : ''}? ${pln(p.n, 'Ze wordt', 'Ze worden')} niet op het plan geplaatst.`,
+    en: p => `Discard ${p.n} pending ${pln(p.n, 'measurement', 'measurements')}${p.noService ? ` (${p.noService} No service)` : ''}? ${pln(p.n, 'It', 'They')} will not be placed on the plan.`,
+  },
+  'notify.discarded': {
+    fr: p => `${p.n} ${pl(p.n, 'mesure jetée', 'mesures jetées')}`,
+    nl: p => `${p.n} ${pln(p.n, 'meting', 'metingen')} weggegooid`,
+    en: p => `${p.n} ${pln(p.n, 'measurement', 'measurements')} discarded`,
+  },
   'title.space': { fr: 'Barre d\'espace', nl: 'Spatiebalk', en: 'Space bar' },
   'help.ready': { fr: 'Cliquez sur le plan à votre position de départ.', nl: 'Klik op het plan op uw startpositie.', en: 'Click your starting position on the plan.' },
   'help.walking': {
@@ -117,9 +141,9 @@ export const STRINGS = {
   'action.resume': { fr: 'Reprendre la mesure', nl: 'De meting hervatten', en: 'Resume the measurement' },
   'action.placePoint': { fr: 'Placer le point', nl: 'Het punt plaatsen', en: 'Place the point' },
   'confirm.noRadio': {
-    fr: 'La radio n\'est pas connectée : aucune mesure ne sera enregistrée et le trajet comptera comme « pas de service ».\n\n{action} quand même ?',
-    nl: 'De radio is niet verbonden: er worden geen metingen opgeslagen en het traject telt als „geen service".\n\n{action} toch doen?',
-    en: 'The radio is not connected: no measurements will be recorded and the route will count as "no service".\n\n{action} anyway?',
+    fr: 'La radio n\'est pas connectée : aucune mesure ne sera enregistrée et le trajet restera un simple trait, sans niveaux.\n\n{action} quand même ?',
+    nl: 'De radio is niet verbonden: er worden geen metingen opgeslagen en het traject blijft een gewone lijn, zonder niveaus.\n\n{action} toch doen?',
+    en: 'The radio is not connected: no measurements will be recorded and the route will remain a plain line, with no levels.\n\n{action} anyway?',
   },
   'confirm.loss': {
     fr: p => `${p.n} mesures reçues depuis le dernier clic seront perdues.\n\nAnnulez puis cliquez d'abord votre position actuelle sur le plan pour les garder.\n\nContinuer quand même ?`,

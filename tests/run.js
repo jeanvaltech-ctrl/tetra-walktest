@@ -718,7 +718,9 @@ await test('Pas de service : un trou de moins de 3 s n\'ajoute rien', () => {
   assert(floor.segments[0].samples.length === 4 && floor.segments[0].samples.every(x => !x.noService), JSON.stringify(floor.segments[0].samples.map(x => x.noService || x.rssi)));
 });
 
-await test('Pas de service : radio muette (aucune trame) ou trames sans cellule serveuse', async () => {
+// Règle validée par Jean (05/11/2026) : ce test disait « radio muette = points silent ». Désormais, seul
+// un bloc de trames sans cellule serveuse donne « No service » ; un silence total n'est jamais compté sans confirmation.
+await test('Pas de service : trames sans cellule serveuse -> noserving ; radio muette (aucune trame) -> aucun point', async () => {
   // trames reçues, mais aucune ne contient la cellule serveuse (LA + RSSI) : voisines seules
   const neighbourOnly = buildBody([[0x18, 1002], [0x19, -101]]);
   const port = new FakePort({ info: FAKE_INFO, bodies: [neighbourOnly, neighbourOnly, neighbourOnly] });
@@ -736,7 +738,7 @@ await test('Pas de service : radio muette (aucune trame) ou trames sans cellule 
   assert(sessionMod.noServiceCause(0, now) === 'silent', 'aucune trame');
   await radio.disconnect();
   const leg2 = noServiceWalk('silent').segments[0].samples.filter(x => x.leg === 2);
-  assert(leg2.length && leg2.every(x => x.noService === 'silent'), 'cause « silent » non enregistrée');
+  assert(leg2.length === 0, `${leg2.length} point(s) « silent » pour 30 s de radio muette, sans confirmation`);
 });
 
 await test('Pas de service : export CSV et PNG (trace noire à tirets, légende, bandeau)', async () => {
@@ -1237,6 +1239,389 @@ await test('Pourcentages : verdict et troncature sans erreur de virgule flottant
   // 1 point conforme, 2 sans service : 66,66… % tronqué à 66,6 (pas 66,7)
   const cap = caption(project, withNoService(countsFloor(1, 3), 2), 'fr');
   assert(cap.includes('33,3 % des points') && cap.includes('No service : 66,6 %'), cap);
+});
+
+// ---------- veille et radio muette (terrain : portable Windows 11, capot fermé ~30 s en marchant) ----------
+// « No service » ne vient que de trames reçues sans cellule serveuse. Un silence total n'est jamais compté
+// sans confirmation : pause datée de la dernière trame (R2, R3, R5), bouton « Compter ce silence » (R3-c).
+// Un espace de noms de module est figé : remplaçants au comportement d'avant la correction.
+const silenceAction = sessionMod.silenceAction ?? (() => null);           // avant : aucune décision
+const statusAfterChange = sessionMod.statusAfterChange ?? (() => null);   // avant : le texte de pause reste
+const OK_SAMPLE = { la: 1001, channel: 100, rssi: -70, c1: 10 };
+
+/** Marche depuis t = 0 avec une mesure valide par seconde jusqu'à `until` ; mêmes appels que radio.js et app.js. */
+function silenceWalk(until = 10000) {
+  let now = 0;
+  const floor = { segments: [], raw: [] }, s = new Session(floor, () => now);
+  s.checkSilence ??= () => null;
+  s.countSilence ??= () => 0;
+  s.discardPending ??= () => ({ n: 0, noService: 0 });
+  const w = {
+    s, floor,
+    go: t => { now = t; },
+    // événement 'frame', puis 'measure' si la trame porte la cellule serveuse
+    frame(t, serving = true) { now = t; const gap = s.noteFrame(t); if (serving) s.addSample(OK_SAMPLE, t); return gap; },
+    // contrôle de chaque seconde
+    tick(t, page = {}) {
+      now = t;
+      s.checkSilence({ hidden: false, frozen: false, lastFrameAt: s.lastFrameAt, now: t, ...page });
+      s.checkService(t, sessionMod.noServiceCause(s.lastFrameAt, t));
+    },
+    click(t, x, y = 0) { now = t; return s.click({ x, y }); },
+    points: () => floor.segments.flatMap(g => g.samples).concat(s.pending),
+    cause: c => w.points().filter(x => x.noService === c),
+    noService: () => w.points().filter(x => x.noService),
+  };
+  s.start(); s.click({ x: 0, y: 0 });
+  for (let t = 1000; t <= until; t += 1000) { w.frame(t); w.tick(t); }
+  return w;
+}
+
+await test('Silence : décision silenceAction (R2 veille, R3 radio muette, sinon rien)', () => {
+  const act = o => silenceAction({ state: 'walking', hidden: false, frozen: false, lastFrameAt: 10000, now: 13000, ...o });
+  const same = (o, want, msg) => assert(JSON.stringify(act(o)) === JSON.stringify(want), `${msg} : ${JSON.stringify(act(o))}`);
+  same({}, { pauseAt: 10000, reason: 'silent' }, 'R3, page visible');
+  same({ hidden: true }, { pauseAt: 10000, reason: 'standby' }, 'R2, page cachée');
+  same({ frozen: true }, { pauseAt: 10000, reason: 'standby' }, 'R2, événement freeze');
+  same({ now: 12999 }, null, 'moins de 3 s');
+  for (const state of ['idle', 'ready', 'paused']) same({ state }, null, `état ${state}`);
+  // aucune trame reçue : référence = début de marche ou dernière mesure valide
+  same({ lastFrameAt: 0, since: 5000, now: 8000 }, { pauseAt: 5000, reason: 'silent' }, 'aucune trame');
+  same({ lastFrameAt: 0, since: 5000, now: 7999 }, null, 'aucune trame, moins de 3 s');
+  // la marche a repris après la dernière trame : le temps de pause n'est pas du silence
+  same({ since: 50000, now: 52000 }, null, 'reprise il y a 2 s');
+  same({ since: 50000, now: 53000 }, { pauseAt: 50000, reason: 'silent' }, 'reprise il y a 3 s');
+});
+
+await test('Silence R2 : page cachée, radio muette 30 s -> pause à la dernière trame, aucun point, pas de diagonale', () => {
+  for (const page of [{ hidden: true }, { frozen: true }]) {
+    const w = silenceWalk(10000);
+    for (let t = 11000; t <= 40000; t += 1000) w.tick(t, page);
+    assert(w.cause('silent').length === 0, `${w.cause('silent').length} point(s) « silent » pour 30 s de veille`);
+    assert(w.noService().length === 0, `${w.noService().length} point(s) « pas de service » pour 30 s de veille`);
+    assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`);
+    assert(w.s.pauseStart === 10000, `pause datée de ${w.s.pauseStart}, attendu la dernière trame (10000)`);
+    assert(w.s.silence?.reason === 'standby', 'raison : ' + JSON.stringify(w.s.silence));
+    assert(w.s.countSilence(40000) === 0 && w.s.state === 'paused', 'une veille ne se compte pas comme silence');
+    w.go(41000); w.s.resume();
+    for (let t = 42000; t <= 45000; t += 1000) { w.frame(t); w.tick(t); }
+    w.click(45500, 100);
+    const seg = w.floor.segments[0];
+    assert(seg.samples.length === 14 && !seg.samples.some(x => x.noService), `${seg.samples.length} points, ${seg.samples.filter(x => x.noService).length} « pas de service » au clic suivant`);
+    assert(Math.abs(seg.samples.at(-1).x - 14000 / 14500 * 100) < 1e-6, `temps de veille non exclu : ${seg.samples.at(-1).x}`);
+  }
+});
+
+await test('Silence R1 : trames sans serveuse, page visible ou cachée -> noserving 1/s, pas de pause', () => {
+  for (const hidden of [false, true]) {
+    const w = silenceWalk(10000);
+    for (let t = 10500; t <= 30000; t += 500) { w.frame(t, false); if (t % 1000 === 0) w.tick(t, { hidden }); }
+    assert(w.s.state === 'walking', `état ${w.s.state} (hidden ${hidden})`);
+    assert(w.cause('noserving').length === 20 && w.cause('silent').length === 0, `${w.cause('noserving').length} noserving, ${w.cause('silent').length} silent`);
+    assert(w.s.silence == null, 'silence signalé alors que les trames arrivent');
+  }
+});
+
+await test('Silence R3 : page visible, radio muette -> pause à la dernière trame, aucun point, bouton proposé', () => {
+  const w = silenceWalk(10000);
+  for (let t = 11000; t <= 16000; t += 1000) w.tick(t);
+  assert(w.noService().length === 0, `${w.noService().length} point(s) pour 6 s de radio muette`);
+  assert(w.s.state === 'paused' && w.s.pauseStart === 10000, `état ${w.s.state}, pause datée de ${w.s.pauseStart}`);
+  assert(w.s.silence?.reason === 'silent', 'bouton non proposé : ' + JSON.stringify(w.s.silence));
+  // les trames reviennent pendant la pause : rien n'est enregistré, la question reste posée
+  const n = w.points().length;
+  for (let t = 17000; t <= 25000; t += 1000) { w.frame(t); w.tick(t); }
+  assert(w.points().length === n && w.s.silence?.reason === 'silent', `${w.points().length - n} point(s) en pause`);
+});
+
+await test('Silence R3-c : « Compter ce silence » -> reprise, points silent 1/s, placés au clic suivant, sans pause comptée', () => {
+  const w = silenceWalk(10000);
+  w.click(10000, 100);
+  for (let t = 11000; t <= 13000; t += 1000) w.tick(t);
+  assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`);
+  w.go(30000);
+  const n = w.s.countSilence(30000);
+  assert(n === 20 && w.cause('silent').length === 20, `${n} point(s), ${w.cause('silent').length} « silent » pour 20 s de silence`);
+  assert(w.cause('silent').every(x => x.rssi === '' && x.time === x.ta), 'heure ou mesure des points : ' + JSON.stringify(w.cause('silent')[0]));
+  assert(w.s.state === 'walking' && w.s.silence == null, `état ${w.s.state}, bouton ${JSON.stringify(w.s.silence)}`);
+  assert(w.s.pausedTotal === 0 && w.s.active(30000) === 30000, `la pause doit compter comme marche : ${w.s.pausedTotal}`);
+  assert(w.s.pending.length === 20, `${w.s.pending.length} en attente`);
+  w.frame(31000); w.frame(32000); w.click(32000, 200);
+  const leg2 = w.floor.segments[0].samples.filter(x => x.leg === 2);
+  assert(leg2.length === 22 && leg2.filter(x => x.noService === 'silent').length === 20, `${leg2.length} points sur le tronçon fermé par le clic`);
+  assert(Math.abs(leg2[0].x - (100 + 1000 / 22000 * 100)) < 1e-6, `position du 1er point : ${leg2[0].x}`);
+  // les trames sans serveuse d'avant le silence gardent leur cause
+  const m = silenceWalk(10000);
+  for (let t = 11000; t <= 15000; t += 1000) { m.frame(t, false); m.tick(t); }
+  for (let t = 16000; t <= 18000; t += 1000) m.tick(t);
+  m.go(25000); m.s.countSilence(25000);
+  assert(m.cause('noserving').length === 5 && m.cause('silent').length === 10, `${m.cause('noserving').length} noserving, ${m.cause('silent').length} silent`);
+});
+
+await test('Silence R3-c : « Compter ce silence » ne compte que la durée réelle du silence (dernière trame avant -> première trame après)', () => {
+  // décision de Jean (05/11) : si la radio est revenue avant le clic, seules les secondes réellement muettes comptent
+  const w = silenceWalk(10000);
+  w.click(10000, 100);
+  for (let t = 11000; t <= 13000; t += 1000) w.tick(t);
+  assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`);
+  for (let t = 18000; t <= 29000; t += 1000) { w.frame(t); w.tick(t); }    // la radio revient à 18 s, toujours en pause
+  w.go(30000);
+  const n = w.s.countSilence(30000);
+  assert(n === 8 && w.cause('silent').length === 8, `${n} point(s) « silent » pour 8 s de silence réel (10 s -> 18 s), clic à 30 s`);
+  assert(w.cause('silent').every(x => x.time > 10000 && x.time <= 18000), 'points hors du silence : ' + w.cause('silent').map(x => x.time).join(','));
+  assert(w.s.state === 'walking' && w.s.silence == null, `état ${w.s.state}`);
+  // de la première trame revenue (18 s) jusqu'au clic (30 s) : c'était une pause, pas de la marche
+  assert(w.s.pausedTotal === 12000 && w.s.active(30000) === 18000, `pause comptée : ${w.s.pausedTotal} ms (attendu 12000)`);
+  w.frame(31000); w.frame(32000); w.click(32000, 200);
+  const leg2 = w.floor.segments[0].samples.filter(x => x.leg === 2);
+  assert(leg2.length === 10 && leg2.filter(x => x.noService === 'silent').length === 8, `${leg2.length} points sur le tronçon fermé par le clic`);
+  assert(w.noService().length === 8, `${w.noService().length} point(s) « No service » au total`);
+  // radio toujours muette au moment du clic : le silence court jusqu'au clic (cas déjà couvert ci-dessus : 20 s -> 20 points)
+  const m = silenceWalk(10000);
+  for (let t = 11000; t <= 13000; t += 1000) m.tick(t);
+  m.go(20000);
+  assert(m.s.countSilence(20000) === 10 && m.s.pausedTotal === 0, `radio encore muette : ${m.cause('silent').length} point(s), pause ${m.s.pausedTotal}`);
+});
+
+await test('Silence R3 : « Reprendre », « Fin de segment » et « Terminer » -> silence non compté, bouton retiré', () => {
+  const paused = () => { const w = silenceWalk(10000); for (let t = 11000; t <= 13000; t += 1000) w.tick(t); assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`); return w; };
+  const w = paused();
+  w.go(30000); w.s.resume();
+  assert(w.s.silence == null && w.s.countSilence(30000) === 0, 'bouton encore proposé après « Reprendre »');
+  for (let t = 31000; t <= 33000; t += 1000) { w.frame(t); w.tick(t); }
+  w.click(33500, 100);
+  assert(w.noService().length === 0, `${w.noService().length} point(s) après « Reprendre »`);
+  const e = paused(); e.go(20000); e.s.endSegment();
+  assert(e.s.silence == null && e.s.countSilence(20000) === 0, 'bouton encore proposé après « Fin de segment »');
+  const f = paused(); f.go(20000); f.s.stop();
+  assert(f.s.silence == null && f.s.countSilence(20000) === 0, 'bouton encore proposé après « Terminer »');
+});
+
+await test('Silence R5 : port perdu -> pause datée de la dernière trame, aucun point', async () => {
+  const w = silenceWalk(10000);
+  w.tick(11000); w.tick(12000);
+  w.go(12400);
+  assert(w.s.pause(w.s.lastFrameAt) && w.s.pauseStart === 10000, `pause datée de ${w.s.pauseStart}`);
+  assert(w.noService().length === 0, `${w.noService().length} point(s) entre la dernière trame et la perte`);
+  const app = await (await fetch('../js/app.js')).text();
+  const handler = app.slice(app.indexOf(`radio.addEventListener('state'`), app.indexOf(`radio.addEventListener('identity'`));
+  assert(/session\.pause\(radio\.lastFrameAt\)/.test(handler), 'pause datée du moment où Windows signale la perte : ' + handler.match(/.*\.pause\(.*/)?.[0]);
+});
+
+await test('Silence : aucune trame reçue -> référence au début de marche ou à la dernière mesure, jamais de point inventé', () => {
+  const session = () => {
+    let now = 5000;
+    const s = new Session({ segments: [] }, () => now);
+    s.checkSilence ??= () => null;
+    s.start(); s.click({ x: 0, y: 0 });
+    return { s, go: t => { now = t; } };
+  };
+  const a = session();
+  for (let t = 6000; t <= 20000; t += 1000) {
+    a.go(t);
+    a.s.checkSilence({ hidden: false, frozen: false, lastFrameAt: 0, now: t });
+    a.s.checkService(t, 'silent');
+  }
+  assert(a.s.pending.length === 0, `${a.s.pending.length} point(s) inventé(s) sans aucune trame`);
+  assert(a.s.state === 'paused' && a.s.pauseStart === 5000, `état ${a.s.state}, pause datée de ${a.s.pauseStart} (début de marche : 5000)`);
+  const b = session();
+  b.go(7000); b.s.addSample(OK_SAMPLE, 7000);
+  b.go(10000); b.s.checkSilence({ hidden: true, frozen: false, lastFrameAt: 0, now: 10000 });
+  assert(b.s.state === 'paused' && b.s.pauseStart === 7000, `état ${b.s.state}, pause datée de ${b.s.pauseStart} (dernière mesure : 7000)`);
+  // sans contrôle de silence non plus, checkService n'ajoute jamais de point « silent » de lui-même
+  const c = session();
+  for (let t = 6000; t <= 40000; t += 1000) { c.go(t); c.s.checkService(t, 'silent'); }
+  c.go(40500); c.s.click({ x: 10, y: 0 });
+  assert(c.s.floor.segments[0].samples.length === 0, `${c.s.floor.segments[0].samples.length} point(s) « silent » de checkService`);
+});
+
+await test('Silence vu après coup (minuteur freiné) : aucun point pour les secondes muettes, la marche continue, message', () => {
+  const w = silenceWalk(10000);
+  const gap = w.frame(40000);
+  assert(w.noService().length === 0, `${w.noService().length} point(s) pour un silence de 30 s vu après coup`);
+  assert(w.s.state === 'walking', `état ${w.s.state}`);
+  assert(gap === 30000, `durée signalée : ${gap}`);
+  assert(t('notify.silenceSkipped', { n: 30 }) === 'Radio silencieuse 30 s : non comptée', t('notify.silenceSkipped', { n: 30 }));
+  assert(!w.frame(41000) && !w.frame(43500), 'un écart de moins de 3 s n\'est pas un silence');
+  // les secondes avec trames mais sans serveuse gardent R1, de part et d'autre du silence
+  const m = silenceWalk(10000);
+  for (let t = 11000; t <= 20000; t += 1000) m.frame(t, false);
+  for (let t = 40000; t <= 45000; t += 1000) m.frame(t, false);
+  m.tick(45000);
+  const ns = m.noService();
+  assert(ns.every(x => x.noService === 'noserving'), 'cause : ' + [...new Set(ns.map(x => x.noService))].join(','));
+  assert(!ns.some(x => x.time > 20000 && x.time < 40000), `${ns.filter(x => x.time > 20000 && x.time < 40000).length} point(s) dans le silence`);
+  assert(ns.length === 16, `${ns.length} point(s) « pas de service » (attendu 10 avant le silence, 6 après)`);
+  assert(m.s.state === 'walking', `état ${m.s.state}`);
+  // silence commencé pendant une pause : seul le temps de marche compte
+  const p = silenceWalk(10000);
+  p.go(10500); p.s.pause();
+  p.go(30000); p.s.resume();
+  assert(!p.frame(31000), 'la pause comptée comme silence');
+});
+
+await test('Silence : un clic après la dernière trame -> la pause ne remonte pas avant ce point', () => {
+  const w = silenceWalk(10000);
+  w.click(12000, 100);
+  w.tick(13000);
+  assert(w.s.state === 'paused', `état ${w.s.state} : le clic retarde la détection`);
+  assert(w.s.pauseStart === 12000, `pause datée de ${w.s.pauseStart}, avant le point cliqué à 12000`);
+  w.go(20000); w.s.resume();
+  assert(w.s.active(20000) === w.s.lastPoint.ta, `temps actif ${w.s.active(20000)}, dernier point ${w.s.lastPoint.ta}`);
+});
+
+await test('Silence : « Reprendre » alors que la radio reste muette -> nouvelle pause à la reprise, sans point', () => {
+  const w = silenceWalk(10000);
+  for (let t = 11000; t <= 13000; t += 1000) w.tick(t);
+  assert(w.s.state === 'paused', `état ${w.s.state} : pas de pause automatique`);
+  w.go(60000); w.s.resume();
+  w.tick(61000); w.tick(62000);
+  assert(w.s.state === 'walking', `pause immédiate à la reprise : ${w.s.state}`);
+  w.tick(63000);
+  assert(w.s.state === 'paused' && w.s.pauseStart === 60000, `état ${w.s.state}, pause datée de ${w.s.pauseStart}, attendu la reprise (60000)`);
+  assert(w.noService().length === 0 && w.s.pausedTotal === 50000, `${w.noService().length} point(s), pausedTotal ${w.s.pausedTotal}`);
+});
+
+await test('Pause : rien ne s\'accumule pendant 60 s de mesures et de contrôles', () => {
+  const w = silenceWalk(5000);
+  w.click(5000, 50);
+  for (let t = 6000; t <= 9000; t += 1000) w.frame(t);
+  w.go(9500); w.s.pause();
+  const pending = w.s.pending.length, placed = JSON.stringify(w.floor.segments);
+  assert(pending === 4, `${pending} en attente`);
+  for (let t = 10000; t <= 70000; t += 1000) { w.frame(t); w.frame(t + 200, false); w.tick(t + 500); }
+  assert(w.s.pending.length === pending, `en attente : ${pending} -> ${w.s.pending.length} en pause`);
+  assert(JSON.stringify(w.floor.segments) === placed, 'points placés modifiés en pause');
+  assert(w.noService().length === 0, `${w.noService().length} point(s) « pas de service » en pause`);
+});
+
+await test('Barre d\'état : un changement d\'état remplace les textes de pause', async () => {
+  const pauseKeys = ['status.pausedClickResume', 'status.radioPaused', 'status.recoveredPaused', 'status.standby', 'status.silencePaused'];
+  for (const k of pauseKeys) {
+    assert(statusAfterChange(k, 'walking') === 'status.measureResumed', `status still says Paused after Resume (${k} -> ${statusAfterChange(k, 'walking')})`);
+    for (const st of ['ready', 'idle']) {
+      const key = statusAfterChange(k, st);
+      assert(key && !pauseKeys.includes(key), `${k}, état ${st} : ${key}`);
+    }
+    assert(statusAfterChange(k, 'paused') === null, `${k} remplacé alors que la mesure est en pause`);
+  }
+  // « Mesure reprise » ne doit pas rester affiché pendant une nouvelle pause
+  assert(statusAfterChange('status.measureResumed', 'paused') === 'status.pausedClickResume', 'status says Resumed while paused');
+  for (const k of ['status.projectCreated', 'status.outside', null]) {
+    assert(statusAfterChange(k, 'walking') === null, `texte sans rapport remplacé : ${k}`);
+  }
+  assert(STRINGS['status.measureResumed']?.fr === 'Mesure reprise' && STRINGS['status.measureResumed']?.en === 'Measurement resumed', JSON.stringify(STRINGS['status.measureResumed']));
+  const app = await (await fetch('../js/app.js')).text();
+  const attach = app.slice(app.indexOf('function attachSession'), app.indexOf('function lostMessage'));
+  assert(attach.includes('statusAfterChange('), 'status still says Paused after Resume : attachSession n\'actualise pas la barre d\'état');
+});
+
+await test('Jeter les mesures en attente : comptes, rien de placé ne change, pas de « pas de service » pour la période jetée', () => {
+  const w = silenceWalk(5000);
+  w.click(5000, 50);
+  for (let t = 6000; t <= 9000; t += 1000) { w.frame(t); w.tick(t); }
+  for (let t = 10000; t <= 16000; t += 1000) { w.frame(t, false); w.tick(t); }
+  w.floor.raw.push([1, 'aa'], [2, 'bb']);
+  assert(w.s.pending.length === 11, `${w.s.pending.length} en attente`);
+  const placed = JSON.stringify(w.floor.segments), raw = JSON.stringify(w.floor.raw);
+  const r = w.s.discardPending();
+  assert(r.n === 11 && r.noService === 7, `jetées : ${JSON.stringify(r)}, attendu 11 dont 7 No service`);
+  assert(w.s.pending.length === 0, `${w.s.pending.length} encore en attente`);
+  assert(JSON.stringify(w.floor.segments) === placed, 'points placés modifiés');
+  assert(JSON.stringify(w.floor.raw) === raw, 'trames brutes modifiées');
+  assert(w.s.state === 'walking', `état ${w.s.state}`);
+  assert(w.s.serviceGap(16000) === 0, `référence du trou : ${w.s.serviceGap(16000)} ms`);
+  // pas de remplissage immédiat ; un vrai trou après la purge reste détecté
+  for (const t of [17000, 18000]) { w.frame(t, false); w.tick(t); }
+  assert(w.noService().length === 0, `${w.noService().length} point(s) ajoutés juste après la purge`);
+  w.frame(19000, false); w.tick(19000);
+  assert(w.cause('noserving').length === 3 && w.noService().every(x => x.time > 16000), `après la purge : ${w.noService().map(x => x.time).join()}`);
+  // sans attente : ne fait rien
+  const e = silenceWalk(5000);
+  e.click(5000, 50);
+  const before = e.s.pausedTotal;
+  e.go(8000);
+  const none = e.s.discardPending();
+  assert(none.n === 0 && none.noService === 0 && e.s.pausedTotal === before, JSON.stringify(none));
+});
+
+await test('Jeter les mesures en attente : tronçon suivant au prorata du temps restant, marche et pause', () => {
+  const w = silenceWalk(5000);
+  w.click(5000, 50);
+  for (let t = 6000; t <= 16000; t += 1000) w.frame(t);
+  assert(w.s.discardPending().n === 11, 'purge');
+  w.frame(17000); w.frame(18000);
+  w.click(20000, 90);
+  // sans cela les mesures se tasseraient au bout du tronçon, comme si la période jetée y avait été parcourue
+  const leg2 = w.floor.segments[0].samples.filter(x => x.leg === 2);
+  assert(leg2.length === 2 && Math.abs(leg2[0].x - 60) < 1e-6 && Math.abs(leg2[1].x - 70) < 1e-6, `positions : ${leg2.map(x => x.x).join()}`);
+  // en pause : la mesure reste en pause, la reprise repart du dernier point
+  const p = silenceWalk(5000);
+  p.click(5000, 50);
+  for (let t = 6000; t <= 9000; t += 1000) p.frame(t);
+  p.go(9500); p.s.pause();
+  p.go(20000);
+  assert(p.s.discardPending().n === 4 && p.s.state === 'paused', `état ${p.s.state}`);
+  p.go(30000); p.s.resume();
+  assert(p.s.active(30000) === p.s.lastPoint.ta, `temps actif ${p.s.active(30000)}, dernier point ${p.s.lastPoint.ta}`);
+  p.tick(31000);
+  assert(p.noService().length === 0, `${p.noService().length} point(s) après la reprise`);
+});
+
+await test('Annuler le point garde les mesures en attente', () => {
+  const w = silenceWalk(5000);
+  w.click(5000, 50);
+  for (let t = 6000; t <= 8000; t += 1000) w.frame(t);
+  assert(w.s.undo() && w.s.pending.length === 8, `${w.s.pending.length} en attente après « Annuler le point »`);
+});
+
+await test('Textes : veille, silence, jeter les mesures (FR, NL, EN)', async () => {
+  const tr = (key, l, params) => { setLang(l, false); try { return t(key, params); } finally { setLang('fr', false); } };
+  const standby = 'Veille détectée (page cachée, radio muette) : mesure en pause depuis 10:00:00. Reprendre au dernier point cliqué.';
+  assert(t('status.standby', { time: '10:00:00' }) === standby, t('status.standby', { time: '10:00:00' }));
+  for (const l of ['nl', 'en']) {
+    assert(tr('status.standby', l, { time: '10:00:00' }).includes('10:00:00'), `${l} : ${tr('status.standby', l, { time: '10:00:00' })}`);
+    assert(tr('status.silencePaused', l, { time: '10:00:00' }).includes('10:00:00'), `${l} : ${tr('status.silencePaused', l, { time: '10:00:00' })}`);
+    assert(tr('notify.silenceSkipped', l, { n: 30 }).includes('30'), `${l} : ${tr('notify.silenceSkipped', l, { n: 30 })}`);
+  }
+  const count = STRINGS['btn.countSilence'], discard = STRINGS['btn.discard'];
+  assert(count?.fr === 'Compter ce silence comme No service' && count?.en === 'Count this silence as No service' && count?.nl, JSON.stringify(count));
+  assert(discard?.fr === 'Jeter les mesures en attente' && discard?.en === 'Discard pending measurements' && discard?.nl, JSON.stringify(discard));
+  const conf = (n, noService, l = 'fr') => tr('confirm.discard', l, { n, noService });
+  assert(conf(619, 27) === 'Jeter 619 mesures en attente (dont 27 No service) ? Elles ne seront pas placées sur le plan.', conf(619, 27));
+  assert(conf(619, 0) === 'Jeter 619 mesures en attente ? Elles ne seront pas placées sur le plan.', conf(619, 0));
+  assert(conf(1, 0) === 'Jeter 1 mesure en attente ? Elle ne sera pas placée sur le plan.', conf(1, 0));
+  for (const l of ['nl', 'en']) assert(conf(619, 27, l).includes('619') && conf(619, 27, l).includes('27'), `${l} : ${conf(619, 27, l)}`);
+  assert(t('notify.discarded', { n: 619 }) === '619 mesures jetées' && t('notify.discarded', { n: 1 }) === '1 mesure jetée', t('notify.discarded', { n: 619 }));
+  // sans radio, le trajet n'est plus compté « pas de service » : la confirmation ne doit plus l'annoncer
+  for (const l of LANGS) assert(!/comptera comme|telt als|will count as/.test(tr('confirm.noRadio', l, { action: 'x' })), `${l} : ${tr('confirm.noRadio', l, { action: 'x' })}`);
+});
+
+await test('Interface : bouton « Compter ce silence », bouton « Jeter », événements de la page, version', async () => {
+  const html = await (await fetch('../index.html')).text();
+  const measure = html.slice(html.indexOf('id="sec-measure"'), html.indexOf('id="sec-floors"'));
+  for (const [id, key] of [['btn-discard', 'btn.discard'], ['btn-count-silence', 'btn.countSilence']]) {
+    assert(new RegExp(`id="${id}"[^>]*data-i18n="${key}"`).test(measure), `#${id} absent du panneau Mesure`);
+  }
+  assert(/id="silence-banner"[^>]*hidden/.test(measure), '#silence-banner absent ou visible par défaut');
+  const app = await (await fetch('../js/app.js')).text();
+  for (const call of ['.checkSilence(', '.countSilence(', '.discardPending(']) assert(app.includes(call), `app.js n'appelle pas ${call}`);
+  assert(/addEventListener\('freeze'/.test(app) && /addEventListener\('resume'/.test(app), 'événements freeze / resume non écoutés');
+  assert(/confirm\(t\('confirm\.discard'/.test(app), 'pas de confirmation avant de jeter les mesures');
+  const sw = await (await fetch('../sw.js')).text();
+  assert(sw.includes(`VERSION = 'v18'`), 'version du service worker : ' + sw.match(/VERSION = '.*'/)?.[0]);
+});
+
+await test('Mise à jour : les anciens points « silent » d\'un projet enregistré restent tels quels', async () => {
+  const { project, floor } = await sampleProject();
+  const s = floor.segments[0].samples[0];
+  Object.assign(s, { rssi: '', noService: 'silent' });
+  const stored = JSON.stringify(floor.segments);
+  const back = await deserializeProject(await serializeProject(project));
+  assert(JSON.stringify(back.floors[0].segments) === stored, 'points enregistrés modifiés à l\'ouverture');
+  assert(floorStats(back.floors[0]).noService === 1, 'point « silent » non compté');
+  const lines = floorCsv(back.floors[0]).slice(1).trimEnd().split('\r\n'), cols = lines[0].split(';');
+  assert(lines[1].split(';')[cols.indexOf('no_service')] === '1', 'CSV : ' + lines[1]);
 });
 
 const ko = results.filter(r => !r.ok).length;
