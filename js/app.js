@@ -6,7 +6,7 @@ import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
 import { rssiColor, textOn, thresholdsPanelTail, DEFAULT_THRESHOLDS, NO_SERVICE, thresholdsNotice, resetThresholds } from './thresholds.js';
-import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze } from './session.js';
+import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze, statusAfterChange } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
 import { readProjectFolder, newPlans, floorNameFromFile, compareFloorNames, PLANS_DIR, EXPORTS_DIR } from './folder.js';
@@ -80,7 +80,9 @@ const colorOf = rssi => rssiColor(rssi, thresholds());
 const view = new PlanView($('plan'));
 view.drawOverlay = drawOverlay;
 
-function setStatus(text) { $('status').textContent = text; }
+let statusKey = null;   // clé du texte affiché, pour remplacer les textes de pause quand la session change d'état
+function setStatus(text) { $('status').textContent = text; statusKey = null; }
+function setStatusKey(key, params) { setStatus(t(key, params)); statusKey = key; }
 
 // notification bien visible (bas de l'écran) pour confirmer une action : enregistrement, exports…
 let toastTimer = 0;
@@ -93,6 +95,7 @@ function notify(text, kind = 'ok', ms = 5000) {
   if (ms) toastTimer = setTimeout(() => { t.hidden = true; }, ms);
   setStatus(text);
 }
+function notifyKey(key, kind, ms, params) { notify(t(key, params), kind, ms); statusKey = key; }
 
 // ---------- chargement du plan ----------
 async function loadImage(file) {
@@ -336,7 +339,7 @@ $('btn-recover').addEventListener('click', () => runFileAction(async () => {
   state.dirHandle = rec.dirHandle || null;
   state.dirty = !!rec.dirty;
   const paused = state.session.state === 'paused';
-  setStatus(t(paused ? 'status.recoveredPaused' : 'status.recovered'));
+  setStatusKey(paused ? 'status.recoveredPaused' : 'status.recovered');
   render();
   await autosaveNow();
 }));
@@ -629,7 +632,7 @@ view.addEventListener('planclick', e => {
   if (!img || state.mode === 'distance') return;
   if (state.mode === 'idle') {
     if (!ses || ses.state === 'idle') return;
-    if (ses.state === 'paused') { setStatus(t('status.pausedClickResume')); return; }
+    if (ses.state === 'paused') { setStatusKey('status.pausedClickResume'); return; }
     if (p.x < 0 || p.y < 0 || p.x > img.width || p.y > img.height) { setStatus(t('status.outside')); return; }
     if (!radioOkOrConfirm(t('action.placePoint'))) return;
     ses.click(p);
@@ -772,6 +775,8 @@ function attachSession(ses) {
   if (old) old.stop();     // son écouteur ne réagit plus : ce n'est plus la session courante
   if (ses) ses.addEventListener('change', () => {
     if (ses !== state.session) return;
+    const key = statusAfterChange(statusKey, ses.state);
+    if (key) setStatusKey(key);
     markDirty(); scheduleAutosave(); renderMeasure(); renderFloors(); view.redraw();
   });
 }
@@ -812,6 +817,16 @@ $('btn-stop').addEventListener('click', () => {
   lostMessage(state.session.stop());
   render();
 });
+$('btn-discard').addEventListener('click', () => {
+  const { pending } = state.session;
+  if (!confirm(t('confirm.discard', { n: pending.length, noService: pending.filter(s => s.noService).length }))) return;
+  notify(t('notify.discarded', { n: state.session.discardPending().n }));
+});
+$('btn-count-silence').addEventListener('click', () => {
+  if (radioOkOrConfirm(t('action.resume'))) state.session.countSilence();
+});
+
+const clockTime = at => new Date(at).toLocaleTimeString(locale());
 
 const MEASURE_HELP = { ready: 'help.ready', walking: 'help.walking', paused: 'help.paused' };
 
@@ -842,6 +857,11 @@ function renderMeasure() {
   $('btn-undo').hidden = st === 'idle';
   $('btn-undo').disabled = !ses.canUndo;
   $('btn-stop').hidden = st === 'idle';
+  $('btn-discard').hidden = st !== 'walking' && st !== 'paused';
+  $('btn-discard').disabled = !ses.pending.length;
+  const silent = st === 'paused' && !!ses.silence && ses.silence.reason === 'silent';
+  $('silence-banner').hidden = !silent;
+  if (silent) $('silence-text').textContent = t('status.silencePaused', { time: clockTime(ses.pauseStart) });
 
   const s = floorStats(fl), cal = fl.calibration;
   const length = cal ? `${nf(s.length * cal.mPerPx, 1)} m` : `${nf(s.length)} ${t('stats.notCalibrated')}`;
@@ -971,7 +991,7 @@ async function autoReconnect() {
           reconnectWanted = false;
           radioStuck = false;
           showRadioError('');
-          setStatus(t(state.session && state.session.state === 'paused' ? 'status.reconnectedResume' : 'status.reconnected'));
+          setStatusKey(state.session && state.session.state === 'paused' ? 'status.reconnectedResume' : 'status.reconnected');
           return;
         } catch (e) {
           // port ouvert mais muet : radio bloquée (ou Port 2, qui ne compte pas si Port 1 répond ensuite)
@@ -1017,8 +1037,12 @@ radio.addEventListener('state', e => {
   if (s === 'disconnected') $('radio-info').hidden = true;
   if (message) showRadioError(message);
   if (s === 'streaming') { streamingSince = Date.now(); resetLive(); }
-  // radio perdue en pleine mesure : pause automatique (rien n'est perdu de ce qui est placé)
-  if (s === 'disconnected' && state.session && state.session.pause(pauseTime())) setStatus(t('status.radioPaused'));
+  // radio perdue en pleine mesure : pause automatique datée de la dernière trame, pas du moment où
+  // Windows signale la perte (rien n'est perdu de ce qui est placé)
+  if (s === 'disconnected' && state.session && state.session.pause(radio.lastFrameAt)) {
+    setStatusKey('status.radioPaused');
+    if (pageAway) announceStandby(state.session.pauseStart);
+  }
   renderMeasure();
 });
 
@@ -1035,7 +1059,9 @@ radio.addEventListener('lost', () => {
 
 // trames brutes conservées pendant la mesure (pour pouvoir tout recalculer plus tard)
 radio.addEventListener('frame', e => {
-  if (state.session) state.session.noteFrame(e.detail.time.getTime());
+  // silence vu seulement une fois fini (contrôle freiné) : la marche continue, le silence n'est pas compté
+  const unseen = state.session ? state.session.noteFrame(e.detail.time.getTime()) : 0;
+  if (unseen) announce(() => notify(t('notify.silenceSkipped', { n: nf(unseen / 1000) }), 'warn', 10000));
   if (state.session && state.session.state !== 'idle') state.floor.raw.push([e.detail.time.getTime(), toHex(e.detail.body)]);
 });
 
@@ -1113,21 +1139,59 @@ function updateAge() {
   $('radio-pill').classList.toggle('stale', stale);
   if (silent && !silentWarned) {
     silentWarned = true;
-    notify(t('live.silent'), 'ko', 10000);
+    notifyKey('live.silent', 'ko', 10000);
   }
 }
 let lastTick = Date.now();   // dernier contrôle de chaque seconde (sert à repérer une veille)
+let pageAway = document.visibilityState === 'hidden';   // page cachée ou figée depuis le dernier retour
+let awayNotice = null;       // message à montrer au retour sur la page
 
-/** Instant de la pause : au dernier contrôle si l'ordinateur sortait de veille (le temps de veille compte comme pause). */
-const pauseTime = (now = Date.now()) => (isFreeze(lastTick, now, radio.lastFrameAt) ? lastTick : now);
+/** Montre le message tout de suite, ou au retour sur la page si elle est cachée (un toast y passerait inaperçu). */
+function announce(show) {
+  if (document.visibilityState === 'hidden') awayNotice = show; else show();
+}
+function announceStandby(at) {
+  announce(() => notifyKey('status.standby', 'ko', 15000, { time: clockTime(at) }));
+}
+
+/** Pause automatique si la radio se tait pendant la marche ; la décision est dans session.js. */
+function watchSilence(now) {
+  const ses = state.session;
+  if (!ses || ses.state !== 'walking') return;
+  // réveil après une veille (aucune trame pendant le saut d'horloge) : pause, sans point « pas de service »
+  if (isFreeze(lastTick, now, radio.lastFrameAt)) {
+    ses.pause(lastTick);
+    announce(() => notifyKey('notify.frozen', 'ko', 15000));
+    return;
+  }
+  // sans radio connectée, marcher a été confirmé (corrections au bureau) : un simple trait, sans pause ni point
+  if (radio.state !== 'streaming') return;
+  const hidden = document.visibilityState === 'hidden';
+  // page visible, contrôle en retard : le fil était occupé (boîte de confirmation, export), les trames
+  // reçues entre-temps attendent encore d'être lues : le contrôle suivant tranchera
+  if (!hidden && !pageAway && now - lastTick >= NO_SERVICE_MS) return;
+  const action = ses.checkSilence({ hidden, frozen: pageAway, lastFrameAt: radio.lastFrameAt, now });
+  if (!action) return;
+  if (action.reason === 'standby') announceStandby(action.pauseAt);
+  else setStatusKey('status.silencePaused', { time: clockTime(action.pauseAt) });
+}
+
+function pageBack() {
+  if (document.visibilityState === 'hidden') return;
+  watchSilence(Date.now());
+  pageAway = false;
+  if (awayNotice) awayNotice();
+  awayNotice = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') pageAway = true; else pageBack();
+});
+document.addEventListener('freeze', () => { pageAway = true; });
+document.addEventListener('resume', pageBack);
 
 setInterval(() => {
   const now = Date.now();
-  // réveil après une veille (aucune trame pendant le saut d'horloge) : pause, sans point « pas de service »
-  if (state.session && state.session.state === 'walking' && isFreeze(lastTick, now, radio.lastFrameAt)) {
-    state.session.pause(lastTick);
-    notify(t('notify.frozen'), 'ko', 15000);
-  }
+  watchSilence(now);
   lastTick = now;
   // ajoute les points manquants ; l'événement 'change' de la session redessine et sauvegarde
   if (state.session) state.session.checkService(now, noServiceCause(radio.lastFrameAt, now));
