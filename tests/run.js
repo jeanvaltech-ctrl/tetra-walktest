@@ -213,8 +213,6 @@ await test('Seuils RSSI : légende ≥ -65 … ≥ -88, < -88, puis « pas de se
   const items = legendItems(DEFAULT_THRESHOLDS);
   assert(items.map(i => i.label).join(' | ') === '≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88', items.map(i => i.label).join(' | '));
   assert(items.map(i => i.color).join() === '#FF0000,#FF8C00,#FFD700,#32CD32,#0066CC', items.map(i => i.color).join());
-  // le « < dernier seuil » suit les seuils du projet
-  assert(legendItems([{ min: -70, color: '#123456' }]).at(-1).label === '< -70' && legendItems([{ min: -70, color: '#123456' }]).at(-1).color === '#0066CC', 'dernier seuil personnalisé');
   for (const [l, want] of [['fr', 'Pas de service'], ['nl', 'Geen service'], ['en', 'No service']]) {
     const lines = renderForLegend.legendLines(DEFAULT_THRESHOLDS, l);
     assert(lines.join(' | ') === `≥ -65 | ≥ -75 | ≥ -85 | ≥ -88 | < -88 | ${want}`, `${l} : ${lines.join(' | ')}`);
@@ -233,7 +231,7 @@ await test('Seuils RSSI : projet enregistré avec les seuils SCOUT -> gardés à
   // ses couleurs ne changent pas non plus : sous -98, toujours le noir de cette légende, pas le bleu CRG
   const th = back.thresholds;
   assert(rssiColor(-98, th) === '#1e3fd8' && rssiColor(-99, th) === '#000000', `-98 -> ${rssiColor(-98, th)}, -99 -> ${rssiColor(-99, th)}`);
-  assert(legendItems(th).at(-1).label === '< -98' && legendItems(th).at(-1).color === '#000000', JSON.stringify(legendItems(th).at(-1)));
+  assert(legendItems(th).at(-1).label === '< -98 (No)' && legendItems(th).at(-1).color === '#000000', JSON.stringify(legendItems(th).at(-1)));
   try {
     for (const l of ['nl', 'en']) {
       setLang(l, false);
@@ -257,6 +255,88 @@ await test('Seuils RSSI : projet avec l\'ancienne légende -72 -> PAS réécrit,
   assert(!app.includes('upgradeThresholds') && !app.includes('legendUpgraded'), 'app.js réécrit encore les seuils à l\'ouverture');
   assert(/thresholdsNotice\(project\)/.test(show), 'showProject ne prévient pas : ' + show);
   assert(!STRINGS['notify.legendUpgraded'], 'message « légende corrigée » encore présent');
+});
+
+// Décision de Jean (05/11/2026) : une liste qui n'est pas le nouveau défaut s'affiche exactement comme sur
+// origin/feat/export-language (#4) : couleurs, libellés, noir et « (No) » sous le dernier seuil.
+const BLACK = '#000000';
+function legendDrawing(th, lang) {
+  const texts = [], fills = [];
+  const ctx = new Proxy({}, {
+    get: (o, k) => k === 'fillText' ? (s => texts.push(s)) : k === 'fillRect' ? (() => fills.push(o.fillStyle)) : k in o ? o[k] : () => {},
+    set: (o, k, v) => { o[k] = v; return true; },
+  });
+  renderForLegend.drawLegend(ctx, 0, 0, th, 1, lang);
+  return { texts: texts.slice(1), fills: fills.slice(1) };   // sans le titre « RSSI (dBm) » ni le fond
+}
+function assertOldRender(th, labels, colors, colorCases) {
+  const items = legendItems(th);
+  assert(items.map(i => i.label).join(' | ') === labels.join(' | '), 'libellés : ' + items.map(i => i.label).join(' | '));
+  assert(items.map(i => i.color).join() === colors.join(), 'couleurs : ' + items.map(i => i.color).join());
+  for (const [l, noService] of [['fr', 'Pas de service'], ['nl', 'Geen service'], ['en', 'No service']]) {
+    const d = legendDrawing(th, l);
+    assert(d.texts.join(' | ') === [...labels, noService].join(' | '), `dessin ${l} : ${d.texts.join(' | ')}`);
+    assert(d.fills.join() === [...colors, BLACK].join(), `dessin ${l} : ${d.fills.join()}`);
+  }
+  for (const [r, c] of colorCases) assert(rssiColor(r, th) === c, `${r} -> ${rssiColor(r, th)}, attendu ${c}`);
+  for (const r of ['', null, undefined, NaN]) assert(rssiColor(r, th) === BLACK, `${r} -> ${rssiColor(r, th)}`);
+  const min = th.at(-1).min, tail = thresholdsMod.thresholdsPanelTail?.(th);
+  assert(JSON.stringify(tail) === JSON.stringify([{ color: BLACK, op: '<', text: `${min} : No` }]), 'panneau des seuils : ' + JSON.stringify(tail));
+}
+
+await test('Seuils RSSI : projet SCOUT -> légende et couleurs exactes de #4, noir et « (No) » sous -98', () => {
+  assertOldRender(scoutProject().thresholds,
+    ['≥ -65', '≥ -67', '≥ -85', '≥ -87', '≥ -98', '< -98 (No)'],
+    ['#e00000', '#ff8c00', '#ffd800', '#22b14c', '#1e3fd8', BLACK],
+    [[-65, '#e00000'], [-66, '#ff8c00'], [-67, '#ff8c00'], [-68, '#ffd800'], [-85, '#ffd800'], [-86, '#22b14c'], [-87, '#22b14c'], [-88, '#1e3fd8'], [-98, '#1e3fd8'], [-99, BLACK], [-120, BLACK]]);
+});
+
+await test('Seuils RSSI : ancienne légende -72 -> légende et couleurs exactes de #4', () => {
+  assertOldRender(scoutProject([-65, -72, -85, -87, -98]).thresholds,
+    ['≥ -65', '≥ -72', '≥ -85', '≥ -87', '≥ -98', '< -98 (No)'],
+    ['#e00000', '#ff8c00', '#ffd800', '#22b14c', '#1e3fd8', BLACK],
+    [[-72, '#ff8c00'], [-73, '#ffd800'], [-98, '#1e3fd8'], [-99, BLACK]]);
+});
+
+await test('Seuils RSSI : toute liste autre que le défaut suit les règles de #4, seul le défaut exact a le bleu CRG', async () => {
+  // autres couleurs, autre nombre de classes
+  assertOldRender([{ min: -70, color: '#123456' }], ['≥ -70', '< -70 (No)'], ['#123456', BLACK], [[-70, '#123456'], [-71, BLACK]]);
+  // couleurs CRG avec un seuil modifié : ce n'est plus le défaut
+  const edited = DEFAULT_THRESHOLDS.map((x, i) => ({ ...x, min: i === 3 ? -90 : x.min }));
+  assertOldRender(edited, ['≥ -65', '≥ -75', '≥ -85', '≥ -90', '< -90 (No)'], ['#FF0000', '#FF8C00', '#FFD700', '#32CD32', BLACK], [[-90, '#32CD32'], [-91, BLACK]]);
+  // le défaut, même enregistré en minuscules, et après « Seuils par défaut »
+  const p = scoutProject();
+  resetThresholds(p);
+  for (const th of [DEFAULT_THRESHOLDS, DEFAULT_THRESHOLDS.map(x => ({ ...x, color: x.color.toLowerCase() })), p.thresholds]) {
+    assert(legendItems(th).at(-1).label === '< -88' && legendItems(th).at(-1).color === '#0066CC', JSON.stringify(legendItems(th).at(-1)));
+    assert(rssiColor(-89, th) === '#0066CC', `-89 -> ${rssiColor(-89, th)}`);
+    const tail = thresholdsMod.thresholdsPanelTail?.(th);
+    assert(JSON.stringify(tail) === JSON.stringify([{ color: '#0066CC', op: '<', text: '-88' }, { color: BLACK, op: '', text: 'Pas de service' }]), 'panneau des seuils : ' + JSON.stringify(tail));
+  }
+  const app = await (await fetch('../js/app.js')).text();
+  const panel = app.slice(app.indexOf('function renderThresholds'), app.indexOf('// critère ASTRID réglable'));
+  assert(/thresholdsPanelTail\(th\)/.test(panel), 'le panneau n\'utilise pas thresholdsPanelTail : ' + panel);
+});
+
+await test('Seuils RSSI : project.thresholds identique après ouverture, rendu et enregistrement', async () => {
+  for (const mins of [[-65, -67, -85, -87, -98], [-65, -72, -85, -87, -98]]) {
+    const { project } = await sampleProject();
+    project.thresholds = scoutProject(mins).thresholds;
+    const stored = JSON.stringify(project.thresholds);
+    const opened = await deserializeProject(await serializeProject(project));
+    assert(JSON.stringify(opened.thresholds) === stored, 'à l\'ouverture : ' + JSON.stringify(opened.thresholds));
+    const th = opened.thresholds;
+    rssiColor(-120, th); legendItems(th); legendDrawing(th, 'fr'); thresholdsNotice(opened); thresholdsMod.thresholdsPanelTail?.(th);
+    assert(JSON.stringify(opened.thresholds) === stored, 'après le rendu : ' + JSON.stringify(opened.thresholds));
+    const saved = JSON.parse(await serializeProject(opened));
+    assert(JSON.stringify(saved.thresholds) === stored, 'à l\'enregistrement : ' + JSON.stringify(saved.thresholds));
+  }
+});
+
+await test('Doc : pas de classe en plus, le bouton « Seuils par défaut » suffit', async () => {
+  const readme = (await (await fetch('../README.md')).text()).replace(/\s+/g, ' ');
+  assert(readme.includes('légende SCOUT reste celle des projets qui l\'ont enregistrée ; « Seuils par défaut » applique les classes CRG'), 'phrase de Jean absente du README');
+  assert(!readme.includes('reste possible en saisissant'), 'le README propose encore de saisir la légende SCOUT');
 });
 
 await test('Seuils RSSI : message seulement si les seuils diffèrent du défaut (seuils ou couleurs)', () => {
