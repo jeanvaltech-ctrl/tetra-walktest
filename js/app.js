@@ -5,7 +5,7 @@ import { floorCsv, projectCsv, floorPng, fileSafe, combinedCsvName, otherCombine
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
-import { rssiColor, textOn, legendItems, DEFAULT_THRESHOLDS, NO_SERVICE, thresholdsNotice, resetThresholds } from './thresholds.js';
+import { rssiColor, textOn, thresholdsPanelTail, DEFAULT_THRESHOLDS, NO_SERVICE, thresholdsNotice, resetThresholds } from './thresholds.js';
 import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
@@ -857,12 +857,13 @@ function renderMeasure() {
 
 // ---------- seuils RSSI ----------
 function renderThresholds() {
-  const th = thresholds(), below = legendItems(th).at(-1);
+  const th = thresholds();
   $('thresholds').innerHTML = th.map((level, i) =>
     `<span class="swatch" style="background:${level.color}"></span><span>≥</span>` +
     `<input type="number" step="1" max="0" min="-140" data-i="${i}" value="${level.min}" aria-label="${esc(t('aria.threshold', { i: i + 1 }))}">`
-  ).join('') + `<span class="swatch" style="background:${below.color}"></span><span>&lt;</span><span class="muted">${th[th.length - 1].min}</span>` +
-    `<span class="swatch" style="background:${NO_SERVICE.color}"></span><span></span><span class="muted">${esc(t('legend.noService'))}</span>`;
+  ).join('') + thresholdsPanelTail(th).map(row =>
+    `<span class="swatch" style="background:${row.color}"></span><span>${esc(row.op)}</span><span class="muted">${esc(row.text)}</span>`
+  ).join('');
   $('crit-rssi').value = criterion().rssi;
   $('crit-pct').value = criterion().percent;
 }
