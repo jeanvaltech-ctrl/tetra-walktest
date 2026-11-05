@@ -185,10 +185,9 @@
         <div id="thresholds" class="thresholds"></div>
         <p id="thresholds-error" class="ko small" hidden></p>
         <button id="btn-thresholds-reset" data-i18n="btn.resetScout">Rétablir la légende SCOUT</button>
-        <p class="muted small" style="margin-top:12px" data-i18n="crit.help">Critère ASTRID : niveau meilleur que le seuil sur le pourcentage
-          demandé de la surface (approchée par la longueur parcourue).</p>
+        <p class="muted small" style="margin-top:12px" data-i18n="crit.help">Critère ASTRID : au moins le pourcentage demandé des points mesurés au seuil ou mieux (radio portée à la ceinture, perte corporelle incluse). Les points « pas de service » comptent non conformes.</p>
         <div class="row criterion">
-          <label>&gt; <input id="crit-rssi" type="number" step="1" max="0" min="-140" data-i18n-aria="aria.critRssi"> dBm</label>
+          <label>≥ <input id="crit-rssi" type="number" step="1" max="0" min="-140" data-i18n-aria="aria.critRssi"> dBm</label>
           <label><span data-i18n="crit.over">sur</span> <input id="crit-pct" type="number" step="1" min="1" max="100" data-i18n-aria="aria.critPct"> %</label>
         </div>
         <button id="btn-criterion-reset" data-i18n="btn.resetAstrid">Rétablir ASTRID (&gt; -88 dBm, 95 %)</button>

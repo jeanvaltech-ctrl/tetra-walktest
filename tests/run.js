@@ -323,19 +323,28 @@ await test('Plusieurs étages : CSV commun trié par heure, suppression d\'un é
 });
 
 // ---------- critère ASTRID ----------
-await test('ASTRID : seuil strict, pondération par longueur parcourue, arrondi par défaut', async () => {
-  assert(!sampleOk(-88) && sampleOk(-87) && !sampleOk('') && sampleOk(-60), 'seuil > -88 dBm');
+await test('ASTRID : seuil ≥ -88 dBm, % des points (fait foi), distance en information, arrondi par défaut', async () => {
+  // décision de Jean : -88 pile est conforme (Annexes 2 et 6 : « minimum -88 dBm »)
+  assert(sampleOk(-88) && sampleOk(-87) && !sampleOk(-89) && !sampleOk('') && sampleOk(-60), `seuil ≥ -88 dBm : -88 -> ${sampleOk(-88)}`);
   const { project, floor } = await sampleProject();
   // s1 : -60 (conforme) et -95 sur 100 px chacun ; s2 : un seul point (-120), sans longueur
   const r = floorCompliance(floor, project.criterion);
-  assert(r.n === 3 && r.okN === 1 && Math.abs(r.pct - 50) < 1e-9 && Math.abs(r.pctSamples - 100 / 3) < 1e-9 && r.ok === false, JSON.stringify(r));
-  // rester sur place ne pèse pas : 10 points conformes au même endroit ne changent rien
+  assert(r.n === 3 && r.okN === 1 && Math.abs(r.pct - 100 / 3) < 1e-9 && Math.abs(r.pctDistance - 50) < 1e-9 && r.ok === false,
+    'le % des points fait foi, la distance est secondaire : ' + JSON.stringify(r));
+  // 10 points conformes au même endroit : comptent dans le % des points, pas dans la distance
   floor.segments[0].samples.push(...Array.from({ length: 10 }, () => ({ ...floor.segments[0].samples[1], rssi: -60 })));
-  assert(Math.abs(floorCompliance(floor).pct - 50) < 1e-9, 'points immobiles comptés dans la surface');
-  assert(floorCompliance({ segments: [] }).pct === null, 'étage sans mesure');
+  const r2 = floorCompliance(floor);
+  assert(Math.abs(r2.pct - 11 / 13 * 100) < 1e-9 && Math.abs(r2.pctDistance - 50) < 1e-9, JSON.stringify(r2));
+  assert(floorCompliance({ segments: [] }).pct === null && floorCompliance({ segments: [] }).pctDistance === null, 'étage sans mesure');
   assert(fmtPct(94.96) === '94,9 %' && fmtPct(95) === '95,0 %', `${fmtPct(94.96)} / ${fmtPct(95)}`);
-  assert(complianceText(floor, { rssi: -100, percent: 50 }).includes('conforme (objectif 50 %)'), complianceText(floor, { rssi: -100, percent: 50 }));
+  const txt = complianceText(sampleProjectFloorCopy(floor), { rssi: -100, percent: 50 });
+  assert(txt.includes('des points ≥ -100 dBm — conforme (objectif 50 %)') && /distance parcourue : \d/.test(txt), txt);
 });
+
+/** Copie de l'étage limitée aux 3 mesures d'origine (-60, -95, -120). */
+function sampleProjectFloorCopy(floor) {
+  return { ...floor, segments: [{ ...floor.segments[0], samples: floor.segments[0].samples.slice(0, 2) }, floor.segments[1]] };
+}
 
 // ---------- dossier projet ----------
 await test('Dossier projet : noms et ordre des étages', () => {
@@ -478,13 +487,16 @@ await test('Pas de service : le tronçon sans mesure reçoit des points « pas d
   assert(sessionMod.NO_SERVICE_MS === 3000, `délai ${sessionMod.NO_SERVICE_MS}`);
 });
 
-await test('Pas de service : compté NON conforme dans le % ASTRID (distance parcourue)', () => {
+await test('Pas de service : compté NON conforme dans le % ASTRID (points)', () => {
   const r = floorCompliance(noServiceWalk());
   // aujourd'hui : 100 % « conforme » alors qu'un tiers du trajet n'a aucun service
-  assert(r.pct > 55 && r.pct < 72 && r.ok === false, `ASTRID ${r.pct} %, conforme : ${r.ok}`);
+  // aujourd'hui : 100 % « conforme » alors qu'un tiers du trajet n'a aucun service.
+  // % des points (fait foi) : 20 points conformes sur ~50, les points « pas de service » comptent non conformes
+  assert(Math.abs(r.pct - r.okN / r.n * 100) < 1e-9 && r.pct > 38 && r.pct < 42 && r.ok === false, `ASTRID ${r.pct} % des points, conforme : ${r.ok}`);
+  assert(r.pctDistance > 55 && r.pctDistance < 72, `distance ${r.pctDistance}`);
   assert(typeof criterionMod.floorShares === 'function', 'floorShares() (part de distance « pas de service » / « < -98 ») n\'existe pas');
   const sh = criterionMod.floorShares(noServiceWalk(), DEFAULT_THRESHOLDS);
-  assert(sh.noService > 28 && sh.noService < 40 && sh.below === 0, JSON.stringify(sh));
+  assert(sh.noService > 56 && sh.noService < 62 && sh.below === 0, 'parts en % des points : ' + JSON.stringify(sh));
 });
 
 await test('Pas de service : un trou de moins de 3 s n\'ajoute rien', () => {

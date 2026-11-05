@@ -838,8 +838,8 @@ function renderMeasure() {
   const length = cal ? `${nf(s.length * cal.mPerPx, 1)} m` : `${nf(s.length)} ${t('stats.notCalibrated')}`;
   const c = criterion(), r = floorCompliance(fl, c);
   const astrid = r.pct === null ? `<dd class="muted">${t('stats.noMeasure')}</dd>`
-    : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} &gt; ${c.rssi} dBm `
-      + `<span class="muted">${t('stats.goal', { goal: c.percent, points: fmtPct(r.pctSamples) })}</span></dd>`;
+    : `<dd class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${fmtPct(r.pct)} ${t('stats.ofPoints')} ≥ ${nf(c.rssi)} dBm `
+      + `<span class="muted">${t('stats.goal', { goal: nf(c.percent), dist: fmtPct(r.pctDistance) })}</span></dd>`;
   $('measure-stats').innerHTML =
     `<dt>${t('stats.points')}</dt><dd>${nf(s.samples)}${s.noService ? ` <span class="ko">${t('stats.noService', { n: nf(s.noService) })}</span>` : ''}${ses.pending.length ? ` <span class="muted">${t('stats.pending', { n: ses.pending.length })}</span>` : ''}</dd>` +
     `<dt>${t('stats.segments')}</dt><dd>${s.segments}</dd><dt>${t('stats.route')}</dt><dd>${length}</dd>` +

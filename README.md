@@ -3,7 +3,7 @@
 > **EN** — Open-source indoor TETRA coverage survey tool for the **Motorola MTP6550**, replacing
 > Motorola SCOUT. Web app for Edge / Chrome (Web Serial, works offline once loaded), interface in
 > **French, Dutch and English**: floor plans, live serving/neighbour cells, waypoint walk-test with
-> RSSI-coloured trace, real-time ASTRID compliance (> -88 dBm on 95 % of the floor area), CSV / PNG
+> RSSI-coloured trace, real-time ASTRID compliance (at least 95 % of measured points at -88 dBm or better), CSV / PNG
 > export. Live app: https://jeanvaltech-ctrl.github.io/tetra-walktest/ — documentation below is in French.
 
 Outil open source de mesure de couverture TETRA indoor avec un terminal **Motorola MTP6550**,
@@ -87,20 +87,24 @@ l'étage du dessous / du dessus avec ▼ / ▲ (touches Page↓ / Page↑).
 
 ### Critère ASTRID
 
-Recommandation ASTRID pour l'indoor : niveau **meilleur que -88 dBm sur 95 % de la surface**
-(sinon, installation indoor ASTRID exigée par la commission de sécurité, IBZ). L'appli l'évalue
-en direct :
+Règle appliquée : **au moins 95 % des points mesurés à -88 dBm ou mieux**, radio portée à la
+ceinture (perte corporelle incluse) ; sinon, une installation indoor ASTRID est nécessaire. C'est la
+règle du modèle de rapport Connext et de CRG. « -88 dBm ou mieux » suit les annexes techniques de la
+convention ASTRID, qui parlent d'un niveau **minimum** de -88 dBm. Les points « pas de service »
+comptent comme des points non conformes. L'appli l'évalue en direct :
 
 - **panneau live** : « ✔ Conforme ASTRID » / « ✘ Insuffisant » pour la mesure en cours ;
-- **par étage** (panneau Mesure, liste des étages ✔ / ✘) : pourcentage conforme, comparé à
-  l'objectif. La surface est approchée par la **longueur parcourue** (chaque mesure compte pour
-  le bout de trajet qu'elle couvre ; rester sur place ne fausse rien) ; le pourcentage par
-  nombre de points est affiché à titre indicatif. Les pourcentages sont arrondis vers le bas ;
-- **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict et parts de la
-  distance parcourue sans service et sous le dernier seuil dans le bandeau du PNG.
+- **par étage** (panneau Mesure, liste des étages ✔ / ✘) : **% des points** conformes, qui fait
+  foi, comparé à l'objectif. Le % de la **distance parcourue** (chaque mesure compte pour le bout
+  de trajet qu'elle couvre) est affiché à titre d'information. Les pourcentages sont arrondis vers
+  le bas ;
+- **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict en % des points,
+  % de la distance en information, parts des points sans service et sous le dernier seuil dans le
+  bandeau du PNG.
 
-« Meilleur que -88 dBm » = strictement supérieur, soit -87 dBm ou mieux (le vert de la légende
-SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ».
+Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ». Question ouverte, non
+tranchée : -88 dBm s'applique ici radio portée (perte corporelle incluse), alors que l'Annexe 6 de
+la convention ASTRID donne -98 dBm pour une mesure radio portée.
 
 ### Enregistrer et exporter
 
@@ -112,8 +116,8 @@ SCOUT). Seuil et pourcentage sont réglables dans « Seuils RSSI et critère AST
   (`x`, `y` en pixels du plan, origine en haut à gauche ; `x_m`, `y_m` si l'étage est calibré ;
   `no_service` = 1 : point « pas de service », cellules de mesure vides et `astrid_ok` à 0).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
-  (projet, étage, horaire, nombre de mesures, verdict ASTRID en % de la distance parcourue,
-  « pas de service : x % », « < -98 dBm : y % » de cette distance, ISSI de la radio).
+  (projet, étage, horaire, nombre de points, verdict ASTRID en % des points avec la distance
+  parcourue en information, « pas de service : x % », « < -98 dBm : y % » des points, ISSI de la radio).
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
   un CSV commun « tous les étages » trié par heure.
 

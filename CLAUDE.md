@@ -41,7 +41,7 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 ## Fait depuis la V1
 
 Multi-étages, dossier projet (`plans/`, `exports/`), critère ASTRID en temps réel
-(> -88 dBm sur 95 % de la surface), interface FR / NL / EN.
+(au moins 95 % des points à -88 dBm ou mieux, décision du 04/11/2026), interface FR / NL / EN.
 
 ## Ensuite
 
