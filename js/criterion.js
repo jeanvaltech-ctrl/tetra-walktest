@@ -60,7 +60,7 @@ const tenths = p => Math.floor(p * 10 + 1e-9);
 /** Pourcentage arrondi vers le bas : 94,96 % ne doit jamais s'afficher « 95,0 % » si c'est non conforme. */
 export const fmtPct = (p, lang) => `${nf(tenths(p) / 10, 1, lang)} %`;
 
-/** « ASTRID : 96,2 % des points ≥ -88 dBm — conforme (objectif 95 %) · pas de service : 1,0 % · distance parcourue : 97,0 % », ou null. */
+/** « ASTRID : 96,2 % des points ≥ -88 dBm — conforme (objectif 95 %) · No service : 1,0 % · distance parcourue : 97,0 % », ou null. */
 export function complianceText(floor, c = DEFAULT_CRITERION, lang) {
   const r = floorCompliance(floor, c);
   if (r.pct === null) return null;

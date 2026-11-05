@@ -80,9 +80,9 @@ export function drawTrace(ctx, t, floor, thresholds, k = 1) {
 
 export const LEGEND_W = 118;
 
-/** Textes de la légende : classes de RSSI (sans langue), puis « pas de service » dans la langue demandée. */
+/** Textes de la légende : classes de RSSI (sans langue), puis « No service » à l'export, le terme de l'interface à l'écran. */
 export const legendLines = (thresholds, lang) =>
-  [...legendItems(thresholds).map(it => it.label), tx(lang, 'legend.noService')];
+  [...legendItems(thresholds).map(it => it.label), tx(lang, lang ? 'export.noService' : 'legend.noService')];
 
 /** Légende RSSI, coin haut-gauche en (x, y). */
 export function drawLegend(ctx, x, y, thresholds, k = 1, lang) {
