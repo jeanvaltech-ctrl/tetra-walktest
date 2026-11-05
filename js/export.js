@@ -4,8 +4,7 @@ import { NEIGH } from './protocol.js';
 import { FONT, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
 import { t, tx, getLang, getExportLang, fmtDate, fmtTime } from './i18n.js';
 import { otherCombinedCsvs } from './folder.js';
-import { DEFAULT_CRITERION, sampleOk, complianceText, floorCompliance, floorShares, fmtPct, fmtNokPct } from './criterion.js';
-import { DEFAULT_THRESHOLDS } from './thresholds.js';
+import { DEFAULT_CRITERION, sampleOk, complianceText } from './criterion.js';
 
 // Colonnes : mêmes noms que tools/mtp_trace.py, plus date, segment et position en mètres.
 // x, y : pixels du plan importé (origine en haut à gauche) ; x_m, y_m : si l'étage est calibré.
@@ -73,13 +72,8 @@ export function caption(project, floor, lang = getLang()) {
     ? `${fmtDate(new Date(samples[0].time), lang)} ${fmtTime(new Date(samples[0].time), lang)}–${fmtTime(new Date(samples[samples.length - 1].time), lang)}`
     : '';
   const radio = floor.radio && floor.radio.issi ? tx(lang, 'caption.radio', { issi: floor.radio.issi }) : '';
-  const c = project.criterion || DEFAULT_CRITERION;
-  const astrid = complianceText(floor, c, lang);
-  const th = project.thresholds || DEFAULT_THRESHOLDS, sh = floorShares(floor, th);
-  const shares = sh.noService === null ? [] : [tx(lang, 'caption.nonCompliant', { pct: fmtNokPct(floorCompliance(floor, c).pct, lang) }),
-    tx(lang, 'caption.noService', { pct: fmtPct(sh.noService, lang) }),
-    tx(lang, 'caption.below', { rssi: th[th.length - 1].min, pct: fmtPct(sh.below, lang) })];
-  return [parts, when, tx(lang, 'caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
+  const astrid = complianceText(floor, project.criterion || DEFAULT_CRITERION, lang);
+  return [parts, when, tx(lang, 'caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, radio].filter(Boolean).join(' · ');
 }
 
 /** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau (textes dans la langue des exports). */

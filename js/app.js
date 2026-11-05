@@ -5,7 +5,7 @@ import { floorCsv, projectCsv, floorPng, fileSafe, combinedCsvName, otherCombine
 import { dist } from './geometry.js';
 import { Radio, RADIO_VID } from './radio.js';
 import { INFO, toHex } from './protocol.js';
-import { rssiColor, textOn, DEFAULT_THRESHOLDS, NO_COVERAGE, upgradeThresholds } from './thresholds.js';
+import { rssiColor, textOn, thresholdsPanelTail, DEFAULT_THRESHOLDS, NO_SERVICE, thresholdsNotice, resetThresholds } from './thresholds.js';
 import { Session, floorStats, NO_SERVICE_MS, noServiceCause, isFreeze } from './session.js';
 import { SimPort } from './simport.js';
 import { AutoSave } from './autosave.js';
@@ -137,7 +137,6 @@ async function floorBitmap(fl) {
 /** Affiche un projet (nouveau, ouvert ou récupéré) sur l'étage demandé (1er par défaut). */
 async function showProject(project, handle, floorId = null, session = null) {
   project.criterion ??= { ...DEFAULT_CRITERION };   // copie de secours d'avant le critère ASTRID
-  const legendUpgraded = upgradeThresholds(project);   // ancienne légende (orange jusqu'à -72)
   state.project = project;
   state.floor = null;
   state.fileHandle = handle;
@@ -149,9 +148,15 @@ async function showProject(project, handle, floorId = null, session = null) {
   $('sec-recover').hidden = true;
   $('form-floor').hidden = true;
   await showFloor(project.floors.find(f => f.id === floorId) || project.floors[0], session);
-  // la correction se refait à chaque ouverture tant que le projet n'est pas réenregistré ;
-  // le message vient après celui de l'ouverture du projet
-  if (legendUpgraded) setTimeout(() => notify(t('notify.legendUpgraded'), 'ok', 10000), 4000);
+  if (thresholdsNotice(project)) setTimeout(() => noticeThresholds(project), 1000);
+}
+
+/** Prévient une fois le toast libre : le message d'ouverture (plans ignorés…) reste lisible jusqu'au bout. */
+function noticeThresholds(project) {
+  if (state.project !== project) return;
+  if (!$('toast').hidden) { setTimeout(() => noticeThresholds(project), 1000); return; }
+  const text = thresholdsNotice(project);   // vide si « Seuils par défaut » a été cliqué entre-temps
+  if (text) notify(text, 'warn', 15000);
 }
 
 /** Affiche un étage avec sa propre session de mesure. */
@@ -856,12 +861,14 @@ function renderThresholds() {
   $('thresholds').innerHTML = th.map((level, i) =>
     `<span class="swatch" style="background:${level.color}"></span><span>≥</span>` +
     `<input type="number" step="1" max="0" min="-140" data-i="${i}" value="${level.min}" aria-label="${esc(t('aria.threshold', { i: i + 1 }))}">`
-  ).join('') + `<span class="swatch" style="background:#000"></span><span>&lt;</span><span class="muted">${th[th.length - 1].min} : No</span>`;
+  ).join('') + thresholdsPanelTail(th).map(row =>
+    `<span class="swatch" style="background:${row.color}"></span><span>${esc(row.op)}</span><span class="muted">${esc(row.text)}</span>`
+  ).join('');
   $('crit-rssi').value = criterion().rssi;
   $('crit-pct').value = criterion().percent;
 }
 
-// critère ASTRID réglable (par défaut : > -88 dBm sur 95 %)
+// critère ASTRID réglable (par défaut : ≥ -88 dBm sur 95 %)
 function setCriterion(c) {
   state.project.criterion = c;
   markDirty();
@@ -893,7 +900,7 @@ $('thresholds').addEventListener('change', e => {
 
 $('btn-thresholds-reset').addEventListener('click', () => {
   if (!state.project) return;
-  state.project.thresholds = DEFAULT_THRESHOLDS.map(t => ({ ...t }));
+  resetThresholds(state.project);
   markDirty();
   $('thresholds-error').hidden = true;
   renderThresholds();
@@ -1072,7 +1079,7 @@ radio.addEventListener('measure', e => {
 function showNoService() {
   const b = $('live-rssi');
   b.classList.add('no-service');
-  b.style.background = NO_COVERAGE.color; b.style.color = textOn(NO_COVERAGE.color);
+  b.style.background = NO_SERVICE.color; b.style.color = textOn(NO_SERVICE.color);
   b.querySelector('b').textContent = t('legend.noService');
   for (const id of ['live-la', 'live-ch', 'live-c1']) $(id).textContent = '—';
   $('live-astrid').textContent = t('live.noService');

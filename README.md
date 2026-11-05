@@ -38,9 +38,9 @@ sans couverture (~10 s toutes les ~40 s) : `?demo=noservice` (trames sans cellul
 la langue du navigateur ; le choix est mémorisé. Les noms de colonnes du CSV ne changent pas.
 
 **Langue des exports** : réglage à part (FR / NL / EN, à côté des boutons d'export, **anglais par
-défaut**, mémorisé sur le poste) pour ce qui est écrit dans le PNG (légende, bandeau, échelle). L'écran
-garde la langue de l'interface ; le contenu des CSV ne change jamais et les noms de fichiers restent
-en anglais.
+défaut**, mémorisé sur le poste) pour ce qui est écrit dans le PNG (légende, bandeau, échelle), sauf
+le terme « No service », toujours en anglais dans le PNG. L'écran garde la langue de l'interface ; le
+contenu des CSV ne change jamais et les noms de fichiers restent en anglais.
 
 ### Mesurer
 
@@ -57,7 +57,7 @@ en anglais.
 **Pas de service** : après 3 s de marche sans mesure valide de la cellule serveuse (pauses
 exclues), l'appli ajoute un point « pas de service » par seconde manquante, depuis la dernière
 mesure valide. Ils sont tracés en noir à tirets blancs et comptent **non conformes**, comme un
-niveau sous -98 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
+niveau sous -88 dBm. Si la radio n'envoie plus aucune trame, l'appli affiche aussi « Aucune trame
 reçue : vérifier la radio ».
 
 ### Dossier projet (recommandé)
@@ -104,12 +104,24 @@ comptent comme des points non conformes. L'appli l'évalue en direct :
   de trajet qu'elle couvre) est affiché à titre d'information. Les pourcentages sont arrondis vers
   le bas, le verdict porte sur les comptes exacts ([règle](docs/CSV.md#pourcentages-et-verdict)) ;
 - **exports** : colonnes `astrid_ok` et `no_service` (1 / 0) dans le CSV ; verdict en % des points,
-  % de la distance en information, parts des points non conformes, sans service et sous le dernier
-  seuil dans le bandeau du PNG.
+  part « No service » et % de la distance en information dans le bandeau du PNG.
 
 Seuil et pourcentage sont réglables dans « Seuils RSSI et critère ASTRID ». Question ouverte, non
 tranchée : -88 dBm s'applique ici radio portée (perte corporelle incluse), alors que l'Annexe 6 de
 la convention ASTRID donne -98 dBm pour une mesure radio portée.
+
+### Classes de RSSI
+
+Par défaut, les classes et les couleurs sont celles du rapport CRG
+([tableau](docs/CSV.md#classes-de-rssi)) : ≥ -65 rouge, ≥ -75 orange, ≥ -85 jaune, ≥ -88 vert, en dessous
+bleu ; « pas de service » garde sa ligne dans la légende, en noir à tirets blancs (libellée
+« No service » dans le PNG, quelle que soit la langue des exports).
+
+Un projet qui a enregistré d'autres seuils les garde, avec ses couleurs et sa légende : l'appli ne les
+réécrit jamais, affiche un message à l'ouverture et garde le noir sous le dernier seuil, libellé
+`< -98 (No)`. Modifier un seuil de la liste par défaut donne le même rendu, avec `< ce seuil (No)`.
+L'ancienne légende SCOUT reste celle des projets qui l'ont enregistrée ; « Seuils par défaut » applique
+les classes CRG.
 
 ### Enregistrer et exporter
 
@@ -122,9 +134,9 @@ la convention ASTRID donne -98 dBm pour une mesure radio portée.
   `no_service` = 1 : point « pas de service », cellules de mesure vides et `astrid_ok` à 0).
   Contrat complet, lu par CRG : [`docs/CSV.md`](docs/CSV.md).
 - **Exporter PNG** : le plan à sa taille réelle avec la trace, la légende, l'échelle et un bandeau
-  (projet, étage, horaire, nombre de points, verdict ASTRID en % des points avec la distance
-  parcourue en information, parts « non conforme : x % », « pas de service : y % », « < -98 dBm : z % »
-  des points, ISSI de la radio), dans la langue des exports.
+  (projet, étage, horaire, nombre de points, verdict ASTRID en % des points, part « No service »,
+  distance parcourue en information, ISSI de la radio), dans la langue des exports, sauf « No service »,
+  toujours en anglais.
 - **Exporter tous les étages…** : dans un dossier choisi, le PNG et le CSV de chaque étage, plus
   un CSV commun trié par heure, toujours nommé `<projet> - all floors.csv`, quelle que soit la langue
   (CRG reconnaît aussi les anciens noms `tous les étages` et `alle verdiepingen`). Aucun fichier n'est
@@ -187,7 +199,7 @@ trames non nécessaires supprimées). Ne jamais ajouter de vraie mesure au dép�
 | `js/strings.js` | **tous les textes de l'interface, FR / NL / EN côte à côte** (à relire / compléter ici) |
 | `js/i18n.js` | choix de la langue, traduction (`t()`), formatage des nombres |
 | `js/autosave.js` | copie de secours continue dans le navigateur (IndexedDB) |
-| `js/thresholds.js` | seuils RSSI et couleurs (légende SCOUT) |
+| `js/thresholds.js` | seuils RSSI et couleurs (classes du rapport CRG) |
 | `js/geometry.js` | transformation écran ↔ plan, calculs d'échelle |
 | `js/atp.js` | lecture des fichiers SCOUT `.atp` |
 | `js/simport.js` | radio simulée (`?demo`) |

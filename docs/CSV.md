@@ -70,6 +70,28 @@ un niveau trop faible. Un RSSI vide n'est pas une valeur nulle : ne jamais le li
 `astrid_ok` applique le critère enregistré dans le projet ; le seuil peut donc différer de -88 dBm
 si l'utilisateur l'a modifié.
 
+## Classes de RSSI
+
+Depuis le 04/11/2026 (décision de Jean), les classes par défaut de Walk-Test (trace, légende, panneau
+live, PNG) sont celles du rapport CRG, avec les mêmes couleurs. Le CSV n'écrit ni classe ni couleur :
+le lecteur les déduit de `rssi` et `no_service`.
+
+| Classe | RSSI (dBm) | Couleur |
+|---|---|---|
+| Excellent | ≥ -65 | `#FF0000` |
+| Very good | -65 → -75 (`rssi` ≥ -75) | `#FF8C00` |
+| Good | -75 → -85 (`rssi` ≥ -85) | `#FFD700` |
+| Acceptable | -85 → -88 (`rssi` ≥ -88) | `#32CD32` |
+| Bad | < -88, y compris < -100 | `#0066CC` |
+| No service | pas de RSSI (`no_service` = 1) | `#000000` |
+
+La borne basse d'une classe en fait partie : **-88 dBm pile est vert**, -89 est bleu. La comparaison
+`>=` porte sur le nombre tel quel : une valeur fractionnaire n'est pas arrondie, -88,4 serait bleu (la
+radio n'envoie que des entiers).
+
+Un projet qui a enregistré d'autres seuils les garde, avec sa légende : ses classes peuvent alors différer
+de ce tableau, avec du noir et `< -98 (No)` sous son dernier seuil.
+
 ## Pourcentages et verdict
 
 Règle validée par Jean le 04/11/2026.
@@ -79,14 +101,22 @@ Base : les **points** du CSV (`total` = nombre de lignes, `ok` = lignes avec `as
 1. **Verdict** sur les comptes exacts, jamais sur un pourcentage arrondi : conforme si
    `ok * 100 >= 95 * total`.
 2. **Part conforme** : `ok / total`, **tronquée** à 1 décimale.
-3. **Part non conforme** : `100 - part conforme affichée`, pour que les deux parts affichées fassent
-   toujours 100,0 %.
-4. **Autres parts** (pas de service, sous le dernier seuil) : tronquées à 1 décimale.
+3. **Part « pas de service »** : tronquée à 1 décimale.
+4. **Part non conforme** : `100 - part conforme affichée`, pour que les deux parts affichées fassent
+   toujours 100,0 %. Walk-Test ne l'affiche pas ; la règle vaut pour un lecteur qui l'affiche.
 
-| `ok` / `total` | Part exacte | Conforme | Non conforme | Verdict |
+| `ok` / `total` | Part exacte | Conforme | Non conforme (règle 4) | Verdict |
 |---|---|---|---|---|
 | 59 / 297 | 19,865… % | 19,8 % | 80,2 % | NON conforme |
 | 9496 / 10000 | 94,96 % | 94,9 % | 5,1 % | NON conforme (arrondi, il s'afficherait à tort 95,0 %) |
 | 19 / 20 | 95 % | 95,0 % | 5,0 % | conforme |
 
 Même règle dans Walk-Test (panneaux, bandeau du PNG) et dans CRG 2.6.3.
+
+Le bandeau du PNG donne la part conforme et le verdict, la part « pas de service » et la distance
+parcourue (décision de Jean du 04/11/2026), par exemple :
+`ASTRID : 19,8 % des points ≥ -88 dBm — NON conforme (objectif 95 %) · No service : 49,4 % · distance parcourue : 19,7 %`.
+
+Dans le PNG, en français et en néerlandais, le terme reste « No service » dans la ligne de légende et
+dans le bandeau, quelle que soit la langue des exports (décision de Jean du 05/11/2026) ; le reste suit
+la langue des exports. Le contenu du CSV ne change pas (colonne `no_service`).

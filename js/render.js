@@ -3,7 +3,7 @@
 // k : facteur d'épaisseur / de taille de texte (1 à l'écran, plus grand à l'export).
 // lang : langue des textes dessinés (à l'export) ; absente, celle de l'interface (à l'écran).
 import { niceLength } from './geometry.js';
-import { legendItems, rssiColor } from './thresholds.js';
+import { legendItems, rssiColor, NO_SERVICE } from './thresholds.js';
 import { nf, tx } from './i18n.js';
 
 export { nf };   // formatage des nombres selon la langue choisie
@@ -80,9 +80,9 @@ export function drawTrace(ctx, t, floor, thresholds, k = 1) {
 
 export const LEGEND_W = 118;
 
-/** Textes de la légende : classes de RSSI (sans langue), puis « pas de service » dans la langue demandée. */
+/** Textes de la légende : classes de RSSI (sans langue), puis « No service » à l'export, le terme de l'interface à l'écran. */
 export const legendLines = (thresholds, lang) =>
-  [...legendItems(thresholds).map(it => it.label), tx(lang, 'legend.noService')];
+  [...legendItems(thresholds).map(it => it.label), tx(lang, lang ? 'export.noService' : 'legend.noService')];
 
 /** Légende RSSI, coin haut-gauche en (x, y). */
 export function drawLegend(ctx, x, y, thresholds, k = 1, lang) {
@@ -102,9 +102,9 @@ export function drawLegend(ctx, x, y, thresholds, k = 1, lang) {
     ctx.fillStyle = it.color; ctx.fillRect(8, yy + 2, 14, lh - 6);
     ctx.fillStyle = '#111'; ctx.fillText(lines[i], 30, yy + lh / 2 - 1);
   });
-  // « pas de service » : sa propre ligne, distincte de « < -98 (No) »
+  // « pas de service » : sa propre ligne, distincte de la classe « < dernier seuil »
   const yy = top + items.length * lh, mid = yy + 2 + (lh - 6) / 2;
-  ctx.fillStyle = '#000'; ctx.fillRect(8, yy + 2, 14, lh - 6);
+  ctx.fillStyle = NO_SERVICE.color; ctx.fillRect(8, yy + 2, 14, lh - 6);
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.setLineDash([3, 2.5]);
   ctx.beginPath(); ctx.moveTo(8, mid); ctx.lineTo(22, mid); ctx.stroke();
   ctx.fillStyle = '#111'; ctx.fillText(lines[items.length], 30, yy + lh / 2 - 1, LEGEND_W - 34);

@@ -308,12 +308,12 @@ export const STRINGS = {
   // ---------- seuils et critère ASTRID ----------
   'summary.thresholds': { fr: 'Seuils RSSI et critère ASTRID', nl: 'RSSI-drempels en ASTRID-criterium', en: 'RSSI thresholds and ASTRID criterion' },
   'thresholds.help': { fr: 'Couleur de la trace selon le RSSI de la cellule serveuse (dBm).', nl: 'Kleur van het spoor volgens de RSSI van de serving cel (dBm).', en: 'Trace colour by serving-cell RSSI (dBm).' },
-  'notify.legendUpgraded': {
-    fr: 'Légende corrigée comme SCOUT : orange de -66 à -67 dBm, jaune dès -68 dBm. Exportez à nouveau les PNG de ce projet.',
-    nl: 'Legende gecorrigeerd zoals SCOUT: oranje van -66 tot -67 dBm, geel vanaf -68 dBm. Exporteer de PNG\'s van dit project opnieuw.',
-    en: 'Legend corrected to match SCOUT: orange from -66 to -67 dBm, yellow from -68 dBm. Export this project\'s PNGs again.',
+  'notify.customThresholds': {
+    fr: 'Ce projet utilise ses propres seuils RSSI ({mins}), différents des seuils par défaut alignés sur CRG ({defaults}). Bouton « Seuils par défaut » pour les remplacer.',
+    nl: 'Dit project gebruikt eigen RSSI-drempels ({mins}), die afwijken van de standaarddrempels afgestemd op CRG ({defaults}). Knop „Standaarddrempels" om ze te vervangen.',
+    en: 'This project uses its own RSSI thresholds ({mins}), different from the default thresholds aligned with CRG ({defaults}). Use the "Default thresholds" button to replace them.',
   },
-  'btn.resetScout': { fr: 'Rétablir la légende SCOUT', nl: 'SCOUT-legende herstellen', en: 'Restore SCOUT legend' },
+  'btn.resetThresholds': { fr: 'Seuils par défaut', nl: 'Standaarddrempels', en: 'Default thresholds' },
   'aria.threshold': { fr: 'Seuil {i} (dBm)', nl: 'Drempel {i} (dBm)', en: 'Threshold {i} (dBm)' },
   'err.thresholds': { fr: 'Les seuils doivent être des nombres strictement décroissants.', nl: 'De drempels moeten strikt dalende getallen zijn.', en: 'Thresholds must be strictly decreasing numbers.' },
   'crit.help': {
@@ -324,22 +324,21 @@ export const STRINGS = {
   'crit.over': { fr: 'sur', nl: 'voor', en: 'over' },
   'aria.critRssi': { fr: 'Seuil ASTRID (dBm)', nl: 'ASTRID-drempel (dBm)', en: 'ASTRID threshold (dBm)' },
   'aria.critPct': { fr: 'Pourcentage exigé', nl: 'Vereist percentage', en: 'Required percentage' },
-  'btn.resetAstrid': { fr: 'Rétablir ASTRID (> -88 dBm, 95 %)', nl: 'ASTRID herstellen (> -88 dBm, 95 %)', en: 'Restore ASTRID (> -88 dBm, 95 %)' },
+  'btn.resetAstrid': { fr: 'Rétablir ASTRID (≥ -88 dBm, 95 %)', nl: 'ASTRID herstellen (≥ -88 dBm, 95 %)', en: 'Restore ASTRID (≥ -88 dBm, 95 %)' },
+  // bandeau du PNG : « No service » en anglais dans toutes les langues (décision de Jean, 05/11/2026)
   'compliance.text': {
-    fr: p => `ASTRID : ${p.pct} des points ≥ ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %)${p.dist ? ` · distance parcourue : ${p.dist}` : ''}`,
-    nl: p => `ASTRID: ${p.pct} van de punten ≥ ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %)${p.dist ? ` · afgelegde weg: ${p.dist}` : ''}`,
-    en: p => `ASTRID: ${p.pct} of points ≥ ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %)${p.dist ? ` · distance walked: ${p.dist}` : ''}`,
+    fr: p => `ASTRID : ${p.pct} des points ≥ ${p.rssi} dBm — ${p.ok ? 'conforme' : 'NON conforme'} (objectif ${p.goal} %) · No service : ${p.noService} · distance parcourue : ${p.dist}`,
+    nl: p => `ASTRID: ${p.pct} van de punten ≥ ${p.rssi} dBm — ${p.ok ? 'voldoet' : 'voldoet NIET'} (doel ${p.goal} %) · No service: ${p.noService} · afgelegde weg: ${p.dist}`,
+    en: p => `ASTRID: ${p.pct} of points ≥ ${p.rssi} dBm — ${p.ok ? 'compliant' : 'NOT compliant'} (target ${p.goal} %) · no service: ${p.noService} · distance covered: ${p.dist}`,
   },
-  'legend.noService': { fr: 'Pas de service', nl: 'Geen service', en: 'No service' },
+  'legend.noService': { fr: 'Pas de service', nl: 'Geen service', en: 'No service' },   // à l'écran
+  'export.noService': { fr: 'No service', nl: 'No service', en: 'No service' },          // ligne de légende du PNG
 
   // ---------- bandeau du PNG exporté ----------
   'caption.measures': {
-    fr: p => (p.ns ? `${p.f(p.n)} points dont ${p.f(p.ns)} sans service` : `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}`),
-    nl: p => (p.ns ? `${p.f(p.n)} punten waarvan ${p.f(p.ns)} zonder service` : `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`),
+    fr: p => (p.ns ? `${p.f(p.n)} points dont ${p.f(p.ns)} No service` : `${p.f(p.n)} ${pl(p.n, 'mesure', 'mesures')}`),
+    nl: p => (p.ns ? `${p.f(p.n)} punten waarvan ${p.f(p.ns)} No service` : `${p.f(p.n)} ${pln(p.n, 'meting', 'metingen')}`),
     en: p => (p.ns ? `${p.f(p.n)} points, ${p.f(p.ns)} without service` : `${p.f(p.n)} ${pln(p.n, 'measurement', 'measurements')}`),
   },
-  'caption.nonCompliant': { fr: 'non conforme : {pct}', nl: 'niet conform: {pct}', en: 'non-compliant: {pct}' },
-  'caption.noService': { fr: 'pas de service : {pct}', nl: 'geen service: {pct}', en: 'no service: {pct}' },
-  'caption.below': { fr: '< {rssi} dBm : {pct}', nl: '< {rssi} dBm: {pct}', en: '< {rssi} dBm: {pct}' },
   'caption.radio': { fr: 'radio ISSI {issi}', nl: 'radio ISSI {issi}', en: 'radio ISSI {issi}' },
 };
