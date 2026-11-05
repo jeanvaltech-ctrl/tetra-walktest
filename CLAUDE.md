@@ -33,7 +33,8 @@ anglais** (tous les textes dans `js/strings.js`, jamais en dur dans le code).
 5. Trace colorée en direct selon des seuils RSSI configurables (défaut = classes du rapport CRG,
    décision du 04/11/2026 : ≥-65 rouge, ≥-75 orange, ≥-85 jaune, ≥-88 vert, sinon bleu ; pas de
    service en noir). Un projet qui a enregistré d'autres seuils (légende SCOUT : ≥-65, ≥-67, ≥-85,
-   ≥-87, ≥-98) les garde, jamais réécrits sans demande.
+   ≥-87, ≥-98) les garde, avec sa légende (noir et « < -98 (No) » sous le dernier seuil), jamais
+   réécrits sans demande ; le bouton « Seuils par défaut » applique les classes CRG.
 6. Panneau live : LA, canal, RSSI, C1 + voisines (identifiées par LA).
 7. Export par étage : CSV (temps, étage, x, y, LA, canal, RSSI, C1, voisines) + PNG du plan avec trace.
 8. Sauvegarde du projet (fichier local) pour pouvoir reprendre.

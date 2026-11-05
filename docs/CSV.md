@@ -89,7 +89,8 @@ La borne basse d'une classe en fait partie : **-88 dBm pile est vert**, -89 est 
 `>=` porte sur le nombre tel quel : une valeur fractionnaire n'est pas arrondie, -88,4 serait bleu (la
 radio n'envoie que des entiers).
 
-Un projet qui a enregistré d'autres seuils les garde : ses classes peuvent alors différer de ce tableau.
+Un projet qui a enregistré d'autres seuils les garde, avec sa légende : ses classes peuvent alors différer
+de ce tableau, avec du noir et `< -98 (No)` sous son dernier seuil.
 
 ## Pourcentages et verdict
 

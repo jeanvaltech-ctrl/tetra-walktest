@@ -116,11 +116,11 @@ Par défaut, les classes et les couleurs sont celles du rapport CRG
 ([tableau](docs/CSV.md#classes-de-rssi)) : ≥ -65 rouge, ≥ -75 orange, ≥ -85 jaune, ≥ -88 vert, en dessous
 bleu ; « pas de service » garde sa ligne dans la légende, en noir à tirets blancs.
 
-Un projet qui a enregistré d'autres seuils les garde, avec ses couleurs : l'appli ne les réécrit jamais et
-affiche un message à l'ouverture. Le bouton « **Seuils par défaut** » les remplace. L'ancienne légende
-SCOUT reste possible en saisissant ses seuils (-65 / -67 / -85 / -87), mais avec les quatre champs et les
-couleurs CRG : tout ce qui est plus bas est bleu. Ses classes bleu jusqu'à -98 et noir en dessous
-n'existent plus que dans les projets qui les ont déjà enregistrées.
+Un projet qui a enregistré d'autres seuils les garde, avec ses couleurs et sa légende : l'appli ne les
+réécrit jamais, affiche un message à l'ouverture et garde le noir sous le dernier seuil, libellé
+`< -98 (No)`. Modifier un seuil de la liste par défaut donne le même rendu, avec `< ce seuil (No)`.
+L'ancienne légende SCOUT reste celle des projets qui l'ont enregistrée ; « Seuils par défaut » applique
+les classes CRG.
 
 ### Enregistrer et exporter
 
