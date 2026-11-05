@@ -666,6 +666,291 @@ await test('Langues : pluriels et paramètres', () => {
   assert(t('floor.count', { n: 2 }) === '2 mesures', t('floor.count', { n: 2 }));
 });
 
+// ---------- langue des exports (le PNG part dans le rapport CRG, quelle que soit la langue de l'interface) ----------
+// Attendu : réglage FR / NL / EN, anglais par défaut, mémorisé à part. Aujourd'hui, une interface en
+// français met « Pas de service » dans le PNG d'un rapport néerlandais.
+const i18nMod = await import('../js/i18n.js');
+const renderMod = await import('../js/render.js');
+const exportMod = await import('../js/export.js');
+// un espace de noms de module est figé (« ns.fn ??= … » lèverait une erreur et stopperait run.js) :
+// les remplaçants reproduisent le comportement d'avant la correction (langue de l'interface)
+const getLang = i18nMod.getLang;
+const getExportLang = i18nMod.getExportLang ?? (() => undefined);
+const setExportLang = i18nMod.setExportLang ?? (() => undefined);
+const tx = i18nMod.tx ?? ((l, key, params) => t(key, params));
+const legendLines = renderMod.legendLines ?? (() => [t('legend.noService')]);
+const combinedCsvName = exportMod.combinedCsvName;
+const otherCombinedWarning = exportMod.otherCombinedWarning ?? (async () => '');   // avant : aucun avertissement
+
+const EXPORT_KEY = 'tetra-walktest.exportLang';
+let freshN = 0;
+/** i18n.js rechargé comme au démarrage de l'appli, avec cette valeur mémorisée (null : aucune). */
+function freshI18n(saved) {
+  if (saved === null) localStorage.removeItem(EXPORT_KEY); else localStorage.setItem(EXPORT_KEY, saved);
+  return import(`../js/i18n.js?fresh=${++freshN}`);
+}
+/** Exécute fn puis rend à ce navigateur la préférence mémorisée qu'il avait avant le test. */
+async function keepingExportPref(fn) {
+  const before = localStorage.getItem(EXPORT_KEY);
+  try { return await fn(); }
+  finally { if (before === null) localStorage.removeItem(EXPORT_KEY); else localStorage.setItem(EXPORT_KEY, before); }
+}
+const defaultExportLang = () => keepingExportPref(async () => (await freshI18n(null)).getExportLang?.());
+
+/** Étage fictif : les `ok` premiers points à -70 dBm, les autres à `lowRssi`, un point par seconde dès 10:00:00. */
+function countsFloor(ok, total, lowRssi = -95) {
+  const t0 = new Date(2000, 0, 1, 10, 0, 0).getTime();
+  return { name: 'Étage -1', segments: [{ id: 's1', points: [], samples: Array.from({ length: total }, (_, i) =>
+    ({ la: 1001, channel: 100, c1: 10, time: t0 + i * 1000, ta: i * 1000, x: i, y: 0, leg: 1, rssi: i < ok ? -70 : lowRssi })) }] };
+}
+
+await test('Langue des exports : anglais par défaut, choix mémorisé, valeur inconnue ignorée', () => keepingExportPref(async () => {
+  assert(typeof i18nMod.getExportLang === 'function', 'getExportLang() n\'existe pas : aucun réglage de langue des exports');
+  assert((await freshI18n(null)).getExportLang() === 'en', 'défaut : anglais');
+  assert((await freshI18n('xx')).getExportLang() === 'en', 'valeur mémorisée inconnue : anglais');
+  assert((await freshI18n('nl')).getExportLang() === 'nl', 'valeur mémorisée non relue au démarrage');
+  localStorage.removeItem(EXPORT_KEY);
+  const uiLang = localStorage.getItem('tetra-walktest.lang');
+  setExportLang('fr');
+  assert(getExportLang() === 'fr' && localStorage.getItem(EXPORT_KEY) === 'fr', `non mémorisé : ${localStorage.getItem(EXPORT_KEY)}`);
+  setExportLang('xx');
+  assert(getExportLang() === 'fr', 'langue inconnue acceptée');
+  assert(localStorage.getItem('tetra-walktest.lang') === uiLang && getLang() === 'fr', 'la langue de l\'interface a changé');
+  setExportLang('en', false);
+}));
+
+await test('Langue des exports : traduire dans une langue donnée sans changer celle de l\'interface', () => {
+  assert(tx('en', 'legend.noService') === 'No service', tx('en', 'legend.noService'));
+  assert(tx('nl', 'floor.count', { n: 1234 }) === '1.234 metingen', tx('nl', 'floor.count', { n: 1234 }));
+  assert(tx('en', 'floor.count', { n: 1234 }) === '1,234 measurements', tx('en', 'floor.count', { n: 1234 }));
+  assert(i18nMod.nf(19.8, 1, 'en') === '19.8' && i18nMod.nf(19.8, 1, 'nl') === '19,8', `nf : ${i18nMod.nf(19.8, 1, 'en')}`);
+  assert(getLang() === 'fr' && t('legend.noService') === 'Pas de service' && i18nMod.nf(19.8, 1) === '19,8', 'interface modifiée');
+});
+
+await test('Langue des exports : interface FR, réglage par défaut -> légende et bandeau en anglais', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  floor.radio = { issi: '1234567' };
+  const lang = await defaultExportLang();
+  assert(legendLines(DEFAULT_THRESHOLDS, lang).includes('No service'), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, lang).join(' | '));
+  const cap = caption(project, floor, lang);
+  assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
+  assert(/without service/.test(cap) && /ASTRID: \d+\.\d % of points/.test(cap) && /NOT compliant \(target 95 %\)/.test(cap), cap);
+  assert(/distance walked/.test(cap) && /no service: \d+\.\d %/.test(cap) && /< -98 dBm: \d+\.\d %/.test(cap) && /radio ISSI 1234567/.test(cap), cap);
+  assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
+});
+
+await test('Langue des exports : NL -> légende et bandeau en néerlandais, interface inchangée', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  assert(legendLines(DEFAULT_THRESHOLDS, 'nl').includes(STRINGS['legend.noService'].nl), 'légende : ' + legendLines(DEFAULT_THRESHOLDS, 'nl').join(' | '));
+  const cap = caption(project, floor, 'nl');
+  assert(!/pas de service|sans service|des points|distance parcourue/i.test(cap), 'bandeau en français : ' + cap);
+  assert(/zonder service/.test(cap) && /ASTRID: \d+,\d % van de punten/.test(cap) && /voldoet NIET \(doel 95 %\)/.test(cap), cap);
+  assert(/afgelegde weg/.test(cap) && /geen service: \d+,\d %/.test(cap) && /< -98 dBm: \d+,\d %/.test(cap), cap);
+  assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée');
+});
+
+await test('Langue des exports : dates et nombres du bandeau selon la langue, pas selon l\'interface', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(59, 1234);   // 1 234 points de 10:00:00 à 10:20:33
+  const en = caption(project, fl, 'en'), nl = caption(project, fl, 'nl');
+  assert(en.includes('1,234 measurements') && en.includes('01/01/2000 10:00–10:20'), en);
+  assert(nl.includes('1.234 metingen') && !nl.includes('2000-01-01') && nl.includes('10:00–10:20'), nl);
+  assert(en.includes('4.7 %') && nl.includes('4,7 %'), `${en} / ${nl}`);
+});
+
+await test('Langue des exports : textes dessinés dans le PNG (légende, bandeau, échelle), écran inchangé', async () => {
+  const { project, floor } = await sampleProject();
+  floor.segments = noServiceWalk('noserving', 150, 50).segments;
+  floor.calibration = { ...floor.calibration, mPerPx: 0.05 };   // barre d'échelle de 5 m : décimale visible
+  const img = await createImageBitmap(floor.image.blob);
+  const proto = OffscreenCanvasRenderingContext2D.prototype, real = proto.fillText;
+  let drawn = [];
+  proto.fillText = function (text, ...rest) { drawn.push(String(text)); return real.call(this, text, ...rest); };
+  try {
+    setExportLang('nl', false);
+    await floorPng(project, floor, img);
+    const nl = drawn.join(' | ');
+    assert(drawn.includes(STRINGS['legend.noService'].nl) && !drawn.includes('Pas de service'), 'légende du PNG : ' + nl);
+    assert(/van de punten/.test(nl) && !/des points/.test(nl), 'bandeau du PNG : ' + nl);
+    assert(drawn.includes('5,0 m'), 'échelle : ' + nl);
+    assert(getLang() === 'fr' && document.documentElement.lang === 'fr', 'interface modifiée par l\'export');
+
+    drawn = [];
+    setExportLang('en', false);
+    await floorPng(project, floor, img);
+    assert(drawn.includes('No service') && drawn.includes('5.0 m') && drawn.join(' | ').includes('of points'), 'PNG en anglais : ' + drawn.join(' | '));
+
+    // la légende à l'écran garde la langue de l'interface
+    drawn = [];
+    renderMod.drawLegend(new OffscreenCanvas(200, 200).getContext('2d'), 0, 0, DEFAULT_THRESHOLDS);
+    assert(drawn.includes('Pas de service'), 'légende à l\'écran : ' + drawn.join(' | '));
+    assert(renderMod.fmtMeters(5.5) === '5,5 m', `échelle à l'écran : ${renderMod.fmtMeters(5.5)}`);
+  } finally {
+    proto.fillText = real;
+    setExportLang('en', false);
+  }
+});
+
+// Décision de Jean (04/11/2026) : les noms de fichiers restent en anglais, quelles que soient les langues.
+await test('Noms de fichiers : CSV commun toujours en anglais, contenu des CSV inchangé', async () => {
+  try {
+    for (const l of LANGS) {
+      setExportLang(l, false);
+      setLang(l, false);
+      assert(combinedCsvName('Plans') === 'Plans - all floors.csv', `interface et exports en ${l} : ${combinedCsvName('Plans')}`);
+      assert(combinedCsvName('Plans', l) === 'Plans - all floors.csv', `langue ${l} précisée : ${combinedCsvName('Plans', l)}`);
+    }
+    setLang('fr', false);
+    assert(!STRINGS['file.allFloors'], 'file.allFloors encore traduit : le nom ne doit pas dépendre de strings.js');
+    for (const l of LANGS) assert(!/CSV commun|gezamenlijke CSV|combined CSV/.test(STRINGS['title.exportLang'][l]), `infobulle en ${l} : ${STRINGS['title.exportLang'][l]}`);
+    setExportLang('nl', false);
+    const { project, floor } = await sampleProject();
+    const csvFl = floorCsv(floor), csvAll = projectCsv(project);
+    setExportLang('en', false);
+    assert(floorCsv(floor) === csvFl && projectCsv(project) === csvAll, 'le contenu du CSV dépend de la langue des exports');
+    assert(csvFl.slice(1).startsWith(CSV_COLUMNS.join(';')), 'en-têtes du CSV modifiés');
+  } finally {
+    setLang('fr', false);
+    setExportLang('en', false);
+  }
+});
+
+/** Faux dossier exports/ : `names` à l'intérieur, enregistre tout appel à removeEntry. */
+function exportsHandle(names, failAfter = null) {
+  const removed = [];
+  return {
+    kind: 'directory', name: 'exports', removed,
+    async *values() {
+      for (const [i, name] of names.entries()) {
+        if (i === failAfter) throw new DOMException('refusé', 'NotAllowedError');
+        yield { kind: name.endsWith('/') ? 'directory' : 'file', name: name.replace(/\/$/, '') };
+      }
+      if (failAfter !== null) throw new DOMException('refusé', 'NotAllowedError');
+    },
+    async removeEntry(name) { removed.push(name); },
+  };
+}
+const needsWarningFn = () => assert(typeof exportMod.otherCombinedWarning === 'function', 'otherCombinedWarning() n\'existe pas : aucun contrôle du dossier exports/');
+
+await test('Exports : un autre CSV commun dans exports/ -> avertissement avec ses noms, rien n\'est supprimé', async () => {
+  const dir = exportsHandle([
+    'Plans - Floor -1.png', 'Plans - Floor -1.csv', 'Plans - all floors.csv',   // ce qu'on vient d'écrire
+    'Plans - tous les étages.csv', 'Plans - alle verdiepingen.csv', 'Autre - all floors.csv',
+    'notes - all floors.txt', 'Dossier - all floors.csv/',
+  ]);
+  const names = 'Autre - all floors.csv, Plans - alle verdiepingen.csv, Plans - tous les étages.csv';
+  const fr = await otherCombinedWarning(dir, 'Plans');
+  assert(fr === `Un autre fichier « tous les étages » existe déjà dans exports/ : ${names}. CRG l'ignore, mais pensez à ne pas l'envoyer avec le rapport.`, 'avertissement : ' + (fr || '(aucun)'));
+  try {
+    setExportLang('nl', false);   // le message suit l'interface, pas la langue des exports
+    assert(await otherCombinedWarning(dir, 'Plans') === fr, 'le message suit la langue des exports');
+    setLang('nl', false);
+    const nl = await otherCombinedWarning(dir, 'Plans');
+    assert(nl.includes(`in exports/: ${names}.`) && nl.includes('CRG negeert'), 'NL : ' + nl);
+    setLang('en', false);
+    const en = await otherCombinedWarning(dir, 'Plans');
+    assert(en.includes(`in exports/: ${names}.`) && en.includes('CRG ignores'), 'EN : ' + en);
+  } finally {
+    setLang('fr', false);
+    setExportLang('en', false);
+  }
+  assert(dir.removed.length === 0, 'fichier supprimé : ' + dir.removed.join(', '));
+  // é décomposé (dossier passé par un Mac) : reconnu quand même
+  const nfd = 'Plans - tous les étages.csv';
+  assert((await otherCombinedWarning(exportsHandle([nfd]), 'Plans')).includes(nfd), 'é décomposé non reconnu');
+});
+
+await test('Exports : même nom seulement -> pas d\'avertissement (écrasement normal)', async () => {
+  needsWarningFn();
+  const cases = [
+    ['Plans', ['Plans - Floor -1.csv', 'Plans - all floors.csv']],
+    ['Plans', ['PLANS - ALL FLOORS.CSV']],                 // même fichier sous Windows
+    ['A/B: test', ['A_B_ test - all floors.csv']],         // nom réellement écrit (caractères interdits remplacés)
+    ['Plans', []],
+  ];
+  for (const [project, names] of cases) {
+    const dir = exportsHandle(names), w = await otherCombinedWarning(dir, project);
+    assert(w === '', `${project} / ${names.join(', ')} : ${w}`);
+    assert(dir.removed.length === 0, 'fichier supprimé');
+  }
+});
+
+await test('Exports : dossier illisible -> pas d\'avertissement, pas d\'erreur', async () => {
+  needsWarningFn();
+  for (const failAfter of [0, 1]) {
+    const dir = exportsHandle(['Plans - tous les étages.csv'], failAfter);
+    const w = await otherCombinedWarning(dir, 'Plans');
+    assert(w === '', `échec après ${failAfter} entrée(s) : ${w}`);
+    assert(dir.removed.length === 0, 'fichier supprimé');
+  }
+});
+
+await test('Exports : « tous les étages » prévient après l\'export dans exports/, aucun code ne supprime de fichier', async () => {
+  const app = await (await fetch('../js/app.js')).text();
+  const all = app.slice(app.indexOf(`$('btn-export-all')`), app.indexOf('function renderSaveState'));
+  assert(/otherCombinedWarning\(projectDir, project\.name\)/.test(all), 'l\'export de tous les étages ne contrôle pas exports/');
+  assert(all.indexOf('otherCombinedWarning(') > all.indexOf('writeHandle('), 'contrôle avant l\'écriture des fichiers');
+  // un seul toast : un notify() de succès après l'avertissement l'effacerait
+  assert(/notify\([^\n]*warning[^\n]*'warn'/.test(all) && !/notify\(/.test(all.slice(all.lastIndexOf(`'warn'`))), 'avertissement effacé ou non affiché');
+  assert((await (await fetch('../css/app.css')).text()).includes('.toast.warn'), 'style .toast.warn absent');
+  for (const f of ['app', 'export', 'folder', 'project', 'autosave']) {
+    assert(!(await (await fetch(`../js/${f}.js`)).text()).includes('removeEntry'), `removeEntry dans js/${f}.js`);
+  }
+});
+
+await test('Langue des exports : sélecteur à côté des boutons d\'export, relié au réglage', async () => {
+  const html = document.createElement('div');
+  html.innerHTML = await (await fetch('../index.html')).text();
+  const sel = html.querySelector('select#export-lang');
+  assert(sel, 'select#export-lang absent de index.html');
+  assert([...sel.options].map(o => o.value).join(',') === LANGS.join(','), 'options : ' + [...sel.options].map(o => o.value).join(','));
+  const label = html.querySelector('label[for="export-lang"]');
+  assert(label && label.dataset.i18n === 'label.exportLang', 'libellé du sélecteur');
+  const e = STRINGS['label.exportLang'];
+  assert(e.fr === 'Langue des exports' && e.nl === 'Taal van de exports' && e.en === 'Export language', JSON.stringify(e));
+  const panel = html.querySelector('#btn-export-all').closest('section');
+  assert(panel.contains(sel), 'le sélecteur n\'est pas dans le panneau des exports');
+  const app = await (await fetch('../js/app.js')).text();
+  assert(/setExportLang\(/.test(app) && /getExportLang\(/.test(app), 'app.js ne relie pas le sélecteur au réglage');
+  assert(/combinedCsvName\(/.test(app) && !app.includes(`t('file.allFloors')`), 'app.js nomme le CSV commun dans la langue de l\'interface');
+});
+
+await test('Pourcentages : 59/297 -> 19,8 conforme et 80,2 non conforme (100 - part affichée)', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(59, 297), r = floorCompliance(fl);
+  assert(r.ok === false && fmtPct(r.pct) === '19,8 %', `${r.ok} ${fmtPct(r.pct)}`);
+  const cap = caption(project, fl, 'fr');
+  assert(cap.includes('19,8 % des points'), cap);
+  assert(cap.includes('non conforme : 80,2 %'), 'part non conforme absente du bandeau ou mal calculée : ' + cap);
+  assert(caption(project, fl, 'en').includes('non-compliant: 80.2 %'), caption(project, fl, 'en'));
+  assert(caption(project, fl, 'nl').includes('niet conform: 80,2 %'), caption(project, fl, 'nl'));
+});
+
+await test('Pourcentages : 9496/10000 -> NON conforme, 94,9 et 5,1 ; 19/20 -> conforme, 95,0 et 5,0', async () => {
+  const { project } = await sampleProject();
+  const fl = countsFloor(9496, 10000), r = floorCompliance(fl);
+  assert(r.ok === false, '94,96 % déclaré conforme');
+  const cap = caption(project, fl, 'fr');
+  assert(cap.includes('94,9 % des points') && cap.includes('NON conforme') && !cap.includes('95,0 %'), cap);
+  assert(cap.includes('non conforme : 5,1 %'), cap);
+  const pile = countsFloor(19, 20), capPile = caption(project, pile, 'fr');
+  assert(floorCompliance(pile).ok === true, '95 % pile : conforme');
+  assert(capPile.includes('95,0 % des points') && capPile.includes('non conforme : 5,0 %'), capPile);
+});
+
+await test('Pourcentages : verdict et troncature sans erreur de virgule flottante, autres parts tronquées', async () => {
+  // 29/100*100 = 28,999999999999996 en virgule flottante : verdict faux et « 28,9 % » affiché
+  const fl = countsFloor(29, 100);
+  assert(floorCompliance(fl, { rssi: -88, percent: 29 }).ok === true, '29/100 pour un objectif de 29 % : verdict sur les comptes exacts');
+  assert(fmtPct(floorCompliance(fl).pct) === '29,0 %', `29/100 affiché ${fmtPct(floorCompliance(fl).pct)}`);
+  const { project } = await sampleProject();
+  // 1 point conforme, 2 sous -98 dBm : 66,66… % tronqué à 66,6 (pas 66,7), non conforme = 100 - 33,3
+  const cap = caption(project, countsFloor(1, 3, -120), 'fr');
+  assert(cap.includes('< -98 dBm : 66,6 %') && cap.includes('non conforme : 66,7 %'), cap);
+});
+
 const ko = results.filter(r => !r.ok).length;
 document.getElementById('out').innerHTML = results.map(r =>
   `<div class="${r.ok ? 'ok' : 'ko'}">${r.ok ? '✔' : '✘'} ${r.name}</div>` + (r.err ? `<pre>${r.err}</pre>` : '')

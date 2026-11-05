@@ -2,15 +2,17 @@
 import { ViewTransform } from './geometry.js';
 import { NEIGH } from './protocol.js';
 import { FONT, drawTrace, drawLegend, drawScaleBar, LEGEND_W } from './render.js';
-import { t } from './i18n.js';
-import { DEFAULT_CRITERION, sampleOk, complianceText, floorShares, fmtPct } from './criterion.js';
+import { t, tx, getLang, getExportLang, fmtDate, fmtTime } from './i18n.js';
+import { otherCombinedCsvs } from './folder.js';
+import { DEFAULT_CRITERION, sampleOk, complianceText, floorCompliance, floorShares, fmtPct, fmtNokPct } from './criterion.js';
 import { DEFAULT_THRESHOLDS } from './thresholds.js';
 
 // Colonnes : mêmes noms que tools/mtp_trace.py, plus date, segment et position en mètres.
 // x, y : pixels du plan importé (origine en haut à gauche) ; x_m, y_m : si l'étage est calibré.
-// astrid_ok : 1 si le RSSI respecte le critère ASTRID du projet (> -88 dBm par défaut), sinon 0.
+// astrid_ok : 1 si le RSSI respecte le critère ASTRID du projet (≥ -88 dBm par défaut), sinon 0.
 // no_service : 1 sur un point « pas de service » (cellules de mesure vides, astrid_ok à 0), sinon 0.
-// CRG lit ces colonnes : ajouter à la fin, ne jamais renommer ni réordonner.
+// CRG lit ces colonnes : ajouter à la fin, ne jamais renommer ni réordonner (contrat : docs/CSV.md).
+// Le contenu du CSV ne dépend d'aucune langue, le nom des fichiers non plus.
 export const CSV_COLUMNS = ['date', 'time', 'floor', 'segment', 'x', 'y', 'x_m', 'y_m', 'la', 'channel', 'rssi', 'c1',
   ...Object.keys(NEIGH).flatMap(n => [`n${n}_la`, `n${n}_channel`, `n${n}_rssi`, `n${n}_cx`]), 'astrid_ok', 'no_service'];
 
@@ -54,23 +56,34 @@ export const floorCsv = (floor, criterion = DEFAULT_CRITERION) => csvText(csvLin
 export const projectCsv = project =>
   csvText(project.floors.flatMap(f => csvLines(f, project.criterion || DEFAULT_CRITERION)).sort((a, b) => a.time - b.time));
 
-/** Texte du bandeau sous le plan exporté. */
-export function caption(project, floor) {
+/** Nom du CSV de tous les étages : toujours en anglais, comme tous les noms de fichiers. */
+export const combinedCsvName = projectName => `${projectName} - all floors.csv`;
+
+/** Message (langue de l'interface) si exports/ contient un autre CSV commun que celui du projet, sinon ''. */
+export async function otherCombinedWarning(dir, projectName) {
+  const names = await otherCombinedCsvs(dir, fileSafe(combinedCsvName(projectName)));
+  return names.length ? t('notify.otherCombined', { names: names.join(', ') }) : '';
+}
+
+/** Texte du bandeau sous le plan exporté, dans la langue demandée (floorPng : la langue des exports). */
+export function caption(project, floor, lang = getLang()) {
   const samples = floorSamples(floor);
   const parts = [project.name, project.building, floor.name].filter(Boolean).join(' — ');
   const when = samples.length
-    ? `${localDate(new Date(samples[0].time))} ${localTime(new Date(samples[0].time)).slice(0, 5)}–${localTime(new Date(samples[samples.length - 1].time)).slice(0, 5)}`
+    ? `${fmtDate(new Date(samples[0].time), lang)} ${fmtTime(new Date(samples[0].time), lang)}–${fmtTime(new Date(samples[samples.length - 1].time), lang)}`
     : '';
-  const radio = floor.radio && floor.radio.issi ? t('caption.radio', { issi: floor.radio.issi }) : '';
-  const astrid = complianceText(floor, project.criterion || DEFAULT_CRITERION);
+  const radio = floor.radio && floor.radio.issi ? tx(lang, 'caption.radio', { issi: floor.radio.issi }) : '';
+  const c = project.criterion || DEFAULT_CRITERION;
+  const astrid = complianceText(floor, c, lang);
   const th = project.thresholds || DEFAULT_THRESHOLDS, sh = floorShares(floor, th);
-  const shares = sh.noService === null ? [] : [t('caption.noService', { pct: fmtPct(sh.noService) }),
-    t('caption.below', { rssi: th[th.length - 1].min, pct: fmtPct(sh.below) })];
-  return [parts, when, t('caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
+  const shares = sh.noService === null ? [] : [tx(lang, 'caption.nonCompliant', { pct: fmtNokPct(floorCompliance(floor, c).pct, lang) }),
+    tx(lang, 'caption.noService', { pct: fmtPct(sh.noService, lang) }),
+    tx(lang, 'caption.below', { rssi: th[th.length - 1].min, pct: fmtPct(sh.below, lang) })];
+  return [parts, when, tx(lang, 'caption.measures', { n: samples.length, ns: samples.filter(s => s.noService).length }), astrid, ...shares, radio].filter(Boolean).join(' · ');
 }
 
-/** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau. */
-export async function floorPng(project, floor, image) {
+/** PNG du plan à sa taille réelle, avec trace, légende, échelle et bandeau (textes dans la langue des exports). */
+export async function floorPng(project, floor, image, lang = getExportLang()) {
   const w = image.width, h = image.height;
   const k = Math.max(1, Math.hypot(w, h) / 1000);   // épaisseurs et textes proportionnels au plan
   const band = Math.round(36 * k);
@@ -82,15 +95,15 @@ export async function floorPng(project, floor, image) {
 
   const t = new ViewTransform();   // identité : coordonnées image = pixels du PNG
   drawTrace(ctx, t, floor, project.thresholds, k);
-  drawLegend(ctx, w - (LEGEND_W + 12) * k, 12 * k, project.thresholds, k);
-  if (floor.calibration) drawScaleBar(ctx, t, floor.calibration.mPerPx, 20 * k, h - 20 * k, k);
+  drawLegend(ctx, w - (LEGEND_W + 12) * k, 12 * k, project.thresholds, k, lang);
+  if (floor.calibration) drawScaleBar(ctx, t, floor.calibration.mPerPx, 20 * k, h - 20 * k, k, lang);
 
   ctx.fillStyle = '#f1f3f5';
   ctx.fillRect(0, h, w, band);
   ctx.fillStyle = '#111';
   ctx.font = `${13 * k}px ${FONT}`;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(caption(project, floor), 12 * k, h + band / 2, w - 24 * k);
+  ctx.fillText(caption(project, floor, lang), 12 * k, h + band / 2, w - 24 * k);
   return canvas.convertToBlob({ type: 'image/png' });
 }
 
